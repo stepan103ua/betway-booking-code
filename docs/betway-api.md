@@ -17,13 +17,16 @@ Extracted from the client bundle config object. `{tld}` = `com.ng`.
 | `authDomain` | `https://www.betway.com.ng/appsynapse/auth` |
 | `playerDomain` | `https://www.betway.com.ng/appsynapse/player` |
 | `sportsDomain` | `https://synapse-sportsapi.betway.com.ng` |
-| `sportsDomainRadar` | `https://www.betway.com.ng/sportsapi/br` |
+| **feeds (observed)** | **`https://feeds-roa2.betwayafrica.com/br/_apis/sport/v1`** |
 | **`bettingDomain`** | **`https://www.betway.com.ng/appsynapse/bet-api-sr`** |
 | `kenticoDomain` | `https://cms1.betwayafrica.com` |
-| feeds (observed) | `https://feeds-roa2.betwayafrica.com/br/_apis/sport/v1` |
 
 The client's HTTP wrapper takes `{ url, type, apiVersion }` and resolves `type` to one of these
 bases: `betting` → `bettingDomain`, `sports` → feeds, `influencer` → separate host.
+
+All feed/betting calls below worked from a plain `fetch`, no cookies, no headers beyond
+`Content-Type: application/json` on POSTs. No signature, no captcha, no `cf_clearance` on the
+API — Cloudflare guards only the HTML document.
 
 ---
 
@@ -40,18 +43,18 @@ Content-Type: application/json
 
 ```jsonc
 {
-  "selections": [ /* one object per pick */ ],
+  "selections": [ /* one object per pick, see field table below */ ],
   "isBuildABet": false,
   "isSingleBet": false,
   "accountId": "00000000-0000-0000-0000-000000000000"  // all-zero = anonymous
 }
 ```
 
-**Selection object** — 37 fields; the ones that matter:
+**Selection object** — the fields that matter:
 
 | Field | Example | Note |
 |---|---|---|
-| `outcomeId` | `"7325887411"` | composite, see §5 |
+| `outcomeId` | `"7325887411"` | composite, see §6 |
 | `marketId` | `"732588741"` | |
 | `marketName` | `"1X2"` | |
 | `outcomeName` | `"Mamelodi Sundowns"` | |
@@ -59,19 +62,11 @@ Content-Type: application/json
 | `eventName` | `"Mamelodi Sundowns vs. Milford FC"` | |
 | `eventEpoch` | unix seconds | kick-off |
 | `priceDecimal` | `1.26` | decimal odds |
-| `priceNumerator` / `priceDenominator` | `13` / `50` | fractional: 13/50 + 1 = 1.26 |
+| `priceNumerator` / `priceDenominator` | `13` / `50` | fractional |
 | `league`, `region`, `sportId` | | |
 | `handicap`, `marketHandicap` | | for Total / Handicap markets |
 | `isMarketActive`, `isEventActive`, `isOutcomeActive` | | **staleness flags** |
 | `nestedBets` | | Build-a-Bet |
-
-Full field list: `isEachWayActive, isStartingPrice, isNested, specialBetType, multiplier,
-outcomeId, marketName, marketId, marketGroupName, marketIsSportBonusAllowed, price, outcome,
-market, originalMarket, sportEvent, isCashOutAllowed, eventId, eventName, eventEpoch,
-eventExpectedEndEpoch, eventIsSportBonusAllowed, venueEpoch, outcomeName, priceDenominator,
-priceNumerator, priceDecimal, isMarketActive, isEventActive, isOutcomeActive,
-eachWayFractionDenominator, eachWayPosition, sportId, handicap, marketHandicap, league,
-region, nestedBets`
 
 **400 response**
 
@@ -81,45 +76,158 @@ region, nestedBets`
 
 ### Code format
 
-- `BW` + 8 hex chars, e.g. `BW6E19810C`. Total length 10.
-- **Case-insensitive** — `bw6df45a44` returned 200.
-- The `BW` prefix is **required**; `6E19810C` returns `BookABetInvalidCode`.
-- The client validates client-side first (`validatedCode` helper) and routes to
-  `bettingHorses` + `apiVersion: v1` when the first character is a digit — horse racing
-  codes use a different backend. Football codes go to `betting` + `v2`.
-- Codes expire: the catalogue (§4) returns `expiryDateTime`, ~24h out.
+- `BW` + 8 hex chars, e.g. `BW6E19810C`. **Case-insensitive.** `BW` prefix required.
+- Codes expire (`Widget/BookingCodes`, §5, gives `expiryDateTime`, ~24h out).
+- Client-side, a code starting with a digit routes to `bettingHorses` + `apiVersion: v1`
+  instead — horse racing codes use a different backend. Football codes: `betting` + `v2`.
 
 ---
 
 ## 3. ENCODE — create a booking code
 
-Contract read from the bundle (not executed — creates a record on their system):
-
 ```
-POST https://www.betway.com.ng/appsynapse/bet-api-sr/{v}/Betting/BookABet
+POST https://www.betway.com.ng/appsynapse/bet-api-sr/v1/Betting/BookABet
 Content-Type: application/json
 
 {
   "cultureCode": "en-US",
   "countryCode": "NG",
   "isSingleBet": false,
-  "outcomes": [ /* the betslip selection array */ ]
+  "outcomes": [ { "outcomeId": "7423294011" }, { "outcomeId": "7423294012" } ]
 }
 ```
 
-Response is read by the client as `response.bookingCode`.
+**Verified live, minimal payload — `{ "outcomeId": "..." }` per selection is sufficient,
+nothing else required.**
 
-Open questions to verify first:
-- API version — the call site sets no `apiVersion`, so it falls through to the wrapper default (likely `v1`). Try `v1` then `v2`.
-- Minimum shape of each entry in `outcomes` — the client posts its full internal selection
-  objects, but the server probably only needs `outcomeId` (+ maybe `marketId`, `eventId`).
-  Start from a `FindBookABet` response and strip fields down until it breaks.
-- Whether an anonymous call is accepted. `FindBookABet` is anonymous; `BookABet` may be too,
-  since booking is a pre-login action by design.
+**200 response**
+
+```json
+{ "bookingCode": "BW6E45553D" }
+```
+
+**Round-trip verified end to end:** decoding `BW6E45553D` immediately after creating it
+returned the same two selections (Liverpool FC (Alexander) vs. Real Madrid (Lucas), 1X2 —
+home & draw), confirming decode ⇄ encode share one consistent model. Odds had moved slightly
+between create and decode (2.27 → 2.17) — expected, since prices are live; not a bug, but
+worth surfacing in the UI ("odds shown may differ from the moment the code was created").
+
+Anonymous, `apiVersion: v1` (not v2 like FindBookABet). No cap found on `outcomes.length`
+during testing.
 
 ---
 
-## 4. Public catalogue of booking codes
+## 4. CREATE flow — sport → event → market → outcome
+
+This is the real substance of the Create screen. Four steps, four endpoints, all anonymous
+GET.
+
+### 4.1 Sport list
+
+```
+GET https://config.betwayafrica.com/cron/sports/NG/en-US
+```
+
+```jsonc
+{
+  "sports": [
+    {
+      "sportId": "soccer",
+      "name": "Soccer",
+      "defaultMarkets": ["[Both Teams To Score]", "[Double Chance]", "[Win/Draw/Win]"],
+      "filterMarkets": [
+        { "name": "[Win/Draw/Win]", "displayName": "1X2", "filterIndex": 1 },
+        { "name": "[Double Chance]", "displayName": "Double Chance", "filterIndex": 3 }
+        /* … full market catalogue for the sport … */
+      ]
+    }
+    /* tennis, basketball, cricket, rugby-union, baseball, esports … */
+  ]
+}
+```
+
+This is also where the human-readable market name catalogue lives — useful for the parser's
+market-name lookup table.
+
+### 4.2 Regions & leagues for a sport (for filtering, optional for MVP)
+
+```
+GET https://feeds-roa2.betwayafrica.com/br/_apis/sport/v1/Feeds/RegionsAndLeagues/soccer?countryCode=NG
+```
+
+Returns `{ regions: [{ regionId, name, leagues: [{ leagueId, name }] }] }` — nested list, e.g.
+England → Premier League, FA Cup, League One… Skip this for the picker MVP (§ Create screen
+already scopes to "upcoming fixtures", no league filter needed) but it's there if wanted.
+
+### 4.3 Event list for a sport
+
+```
+GET https://feeds-roa2.betwayafrica.com/br/_apis/sport/v1/BetBook/Upcoming/?countryCode=NG&sportId=soccer&Skip=0&Take=20&cultureCode=en-US&isEsport=false&boostedOnly=false&marketTypes=%5BWin%2FDraw%2FWin%5D
+```
+
+Path segment is the fixture type, case-sensitive: `Highlights`, `Upcoming`, `LiveInPlay`,
+`Filtered`, `Outrights`. `marketTypes` is a repeatable query param, URL-encoded market name
+from §4.1's `filterMarkets[].name` (e.g. `[Win/Draw/Win]` → `%5BWin%2FDraw%2FWin%5D`) — it
+scopes which markets come back inline with the event list, it does **not** filter which
+events appear.
+
+`Filtered` additionally accepts `FromStartEpoch`, `ToStartEpoch`, `SortOrder`, `Odds.Minimum`,
+`Odds.Maximum`, and repeated `RegionAndLeagueIds[i].regionId` / `.leagueId` pairs — not needed
+for the MVP picker.
+
+**Response shape — flat, normalized, joined by id:**
+
+```jsonc
+{
+  "events":  [{ eventId, name, homeTeam, awayTeam, league, region, expectedStartEpoch, isActive, isLive, … }],
+  "markets": [{ marketId, eventId, name, displayName, marketTypeCName, isActive, … }],
+  "outcomes":[{ outcomeId, marketId, eventId, name, displayName, isTradingActive, … }],
+  "prices":  [{ outcomeId, priceDecimal, numerator, denominator, … }],
+  "scores":  [ /* live score per event, if any */ ],
+  "isFinalPage": false
+}
+```
+
+Join key path: `event.eventId` ← `market.eventId`, `market.marketId` ← `outcome.marketId`,
+`outcome.outcomeId` ← `price.outcomeId`. This is exactly the normalized-store shape worth
+mirroring in the frontend cache (a map per entity, not nested objects) — same pattern
+Betway's own client uses internally (`n.events = new Map`, etc., seen in the bundle).
+
+### 4.4 Full market list for one event (when the user taps into a match)
+
+Two calls, confirmed live:
+
+```
+GET .../v1/MarketGroupings/group-names?eventId=74232940&countryCode=NG
+```
+
+```json
+[
+  { "id": "Main", "name": "Main", "marketCount": 7, "sortOrder": 10 },
+  { "id": "Goals", "name": "Goals", "marketCount": 2, "sortOrder": 20 },
+  { "id": "Totals", "name": "Totals", "marketCount": 2, "sortOrder": 25 },
+  { "id": "Winner", "name": "Winner", "marketCount": 3, "sortOrder": 30 },
+  { "id": "Handicap", "name": "Handicap", "marketCount": 2, "sortOrder": 340 },
+  { "id": "Build A Bet", "name": "Build A Bet", "marketCount": 4, "sortOrder": 999 }
+]
+```
+
+```
+GET .../v1/MarketGroupings/MarketGroupNamesAndMarketsForEvent?eventId=74232940&marketGroupId=Main&countryCode=NG&cultureCode=en-US&skip=0&take=20&isBuildABetOnly=false&searchQuery=
+```
+
+(This is the endpoint you found.) Returns `{ marketGroupNames, marketsInGroup, outcomes,
+prices, boostedPrices }` — same flat/joined shape as §4.3, scoped to one event and one market
+group. `marketGroupId` cycles through the ids from `group-names` (`Main`, `Goals`, `Totals`,
+`Winner`, `Handicap`). `searchQuery` filters markets by name server-side.
+
+**For the MVP picker this whole step (4.4) is skippable** — `BetBook/Upcoming` already returns
+the 1X2 market and its 3 outcomes inline per event, which is all the Create screen needs. Use
+4.4 only if the picker grows beyond a single market.
+
+---
+
+## 5. Public catalogue of booking codes (fixtures / demo data source)
 
 ```
 GET https://apic.betwayafrica.com/api/v1/Widget/BookingCodes?skip=0&limit=6&source=sportsradar
@@ -128,75 +236,73 @@ GET https://apic.betwayafrica.com/api/v1/Widget/BookingCodes?skip=0&limit=6&sour
 ```jsonc
 {
   "total": 120,
-  "nextSubset": 2,
   "data": [
     {
       "bookingCode": "BW6DF45A44",
       "expiryDateTime": "2026-09-03T15:28:31.467+02:00",
-      "count": 5262,                       // times the code was used
-      "bets": [
-        { "eventID": 73655052, "marketID": "736550521", "outcomeID": "7365505211" }
-      ]
+      "count": 5262,
+      "bets": [ { "eventID": 73655052, "marketID": "736550521", "outcomeID": "7365505211" } ]
     }
   ]
 }
 ```
 
-120 live codes, refreshed continuously. **This is the fixture source** — free, anonymous,
-always-valid test data. Pull 20 codes into `fixtures/` and the mock provider is done.
-
-Rendered equivalent for humans: `https://www.betway.com.ng/book-a-bet-results` (client-side
-navigation only — see §6).
+120 live codes, refreshed continuously, anonymous, always-valid. Use for the Decode empty
+state's "popular codes" list and for offline fixtures/mocks.
 
 ---
 
-## 5. ID scheme — composite, not opaque
+## 6. ID scheme — composite, not opaque
 
 ```
 eventId    73258874
-marketId   732588741            = eventId + marketType
-outcomeId  7325887411           = marketId + outcomeIndex
+marketId   732588741            = eventId + marketType index
+outcomeId  7325887411           = marketId + outcome index
 ```
 
-With a market parameter the value is embedded as text:
+With a market parameter (Totals/Handicap), the value is embedded as text:
 
 ```
 marketId   "7378605620total=0.5~"
 outcomeId  "7378605620total=0.5~12"
-             ^^^^^^^^ ^^ ^^^^^^^^^ ^^
-             eventId  20  param     outcome
 ```
 
-Observed market type codes: `1` = 1X2, `10` = Double Chance, `18`/`20` = Total,
-`29` = Anytime Goalscorer (`~74` suffix seen), `54617` = combo markets.
+Observed market type indices: `1` = 1X2, `10` = Double Chance, `11` = Draw No Bet,
+`18`/`20` = Total, `29` = Anytime Goalscorer. Non-soccer sports use a different, larger
+index space (tennis Match Winner market seen as `74150364186`, i.e. a 3-digit type code) —
+**don't hardcode the soccer index table for other sports**, read `marketTypeCName` instead
+of parsing the numeric suffix.
 
-Practical consequence: outcome IDs can be **constructed**, not only echoed back. Good for
-Convert; also the seam where a cross-bookmaker mapping layer would attach.
+Practical consequence: outcome IDs are constructed from event+market+outcome index, not
+random. That's the seam for a future cross-bookmaker mapping layer — same shape, just a
+different id-construction function per provider.
 
 ---
 
-## 6. Platform notes
+## 7. Platform notes
 
 - **Nuxt 3 SPA.** Direct GET on a deep route (`/book-a-bet-results`, `/book-a-bet`) fails
-  with `ERR_ABORTED` / 403 — those routes exist only in the client router. Navigate from `/`.
-- **Cloudflare** guards the HTML document, not the API. Blocking cookies makes CF return a
-  *block* page ("Sorry, you have been blocked") rather than a challenge. The JSON endpoints
-  above answered fine with no cookies at all.
+  with `ERR_ABORTED` — those routes exist only in the client router. Navigate from `/`.
+- **Cloudflare** guards the HTML document, not the API — confirmed across every endpoint in
+  this document, GET and POST, decode and encode. Blocking cookies makes CF return a *block*
+  page ("Sorry, you have been blocked") on the HTML shell; the JSON endpoints don't care.
 - **Do not follow `betway.com`** — some flows redirect the global domain, which is
-  geo-restricted and blocked. Pin every request to `www.betway.com.ng`.
+  geo-restricted and blocked. Pin every request to `www.betway.com.ng` /
+  `feeds-roa2.betwayafrica.com` / `config.betwayafrica.com` / `apic.betwayafrica.com` exactly
+  as listed above.
 - **Live odds arrive over SignalR** (`unsubscriptionBetbookEndpoint`, `signalRGroupId:
-  "event::74100004"`). REST gives the snapshot; the socket gives updates. Out of scope for a
-  2-day build — snapshot + TTL cache is the right call, and worth naming as a deliberate
-  limitation.
-- One transient oddity: `BW6DF45A44` returned 400 once, then 200 on the next call in the same
-  minute. Add a single retry before reporting an invalid code.
+  "event::74232940"`). REST gives the snapshot; the socket gives updates. Out of scope for a
+  2-day build — snapshot + short TTL cache is the right call, and the odds-drift observed in
+  §3 (2.27 → 2.17 seconds apart) is the concrete justification to name in the README.
+- One transient oddity: a valid code returned 400 once, then 200 on the next call in the same
+  minute. Add a single retry before reporting a code as invalid.
 
 ---
 
-## 7. Verdict
+## 8. Verdict
 
-Both halves of the task are reachable anonymously over plain JSON POST. No auth, no signature,
-no captcha, no `cf_clearance` on the API. Server-side `fetch` from Node is enough — no
-headless browser, no proxy.
-
-The remaining unknown is `BookABet` (§3), which is 20 minutes of probing.
+All three operations — decode, encode, and the full sport→event→market→outcome browse needed
+to build a slip from scratch — are reachable anonymously over plain JSON, GET and POST, with
+no auth, no signature, no captcha, no `cf_clearance` on the API. A server-side `fetch` from
+Node is sufficient for the whole backend; no headless browser, no proxy, no test account
+needed for any of it.
