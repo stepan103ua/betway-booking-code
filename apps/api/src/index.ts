@@ -1,3 +1,11 @@
+// Loads apps/api/.env into process.env before anything reads it. Import order matters: this
+// has to run before `loadConfig()`, and ESM hoists imports, so it goes first.
+//
+// A no-op when the file is absent, which is what keeps `npm run dev` working on a fresh clone
+// with no setup. In production there is no .env — Railway and Fly inject real environment
+// variables and this finds nothing to do.
+import 'dotenv/config';
+
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { logger } from './lib/logger.js';
