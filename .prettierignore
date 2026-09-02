@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+package-lock.json
+
+# Markdown here is hand-wrapped prose — docs/, CLAUDE.md, the review skill. Prettier reflows
+# it into a different wrap width and produces a large diff that changes no meaning.
+**/*.md
