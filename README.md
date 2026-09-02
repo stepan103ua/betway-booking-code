@@ -51,6 +51,18 @@ npm run typecheck
 npm run lint
 ```
 
+### In Docker
+
+To run it the way it deploys — API and Redis together, production dependencies only:
+
+```bash
+npm run docker:up
+```
+
+`http://localhost:3000/api/health`. `npm run docker:logs` to follow the API, `npm run
+docker:down` to stop. The image is multi-stage and runs as a non-root user; `apps/api/Dockerfile`
+builds from the repo root because this is an npm workspace.
+
 ## API
 
 | Method & path | Purpose |

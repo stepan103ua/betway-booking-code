@@ -57,7 +57,13 @@ npm run typecheck      # tsc --noEmit across workspaces
 npm run lint           # eslint, run before calling anything done
 npm run redis:up       # local Redis in Docker (optional — see below)
 npm run build          # tsc → apps/api/dist
+npm run docker:up      # whole stack in containers, close to what deploys
+npm run docker:down    # stop it
 ```
+
+Two ways to run it. `npm run dev` (plus `redis:up`) is the everyday loop — hot reload, no image
+rebuild. `npm run docker:up` builds the image and runs API and Redis together; use it to check
+the image works before pushing, not to develop against.
 
 Redis is optional in development: with `REDIS_URL` unset the cache degrades to a pass-through
 and the service runs anyway. `GET /api/health` reports which mode it is in.
@@ -84,6 +90,9 @@ These are the rules the design turns on. Breaking one is a bug even when the tes
 - **No `/api/v1` prefix.** Deliberate, not an oversight — `docs/backend-api.md`, preamble.
 - **Validate at the route edge.** A Zod schema runs before anything reaches a service, so the
   service layer can trust its inputs and never re-checks them.
+- **`apps/api/fixtures/` ships with the image.** `FixturesProvider` resolves it relative to its
+  own compiled location, so a Docker build that copies only `dist/` breaks the very provider
+  the service falls back to when Betway is down. `apps/api/Dockerfile` copies it explicitly.
 
 ## Conventions
 
