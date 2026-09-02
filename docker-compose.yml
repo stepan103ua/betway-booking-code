@@ -1,0 +1,15 @@
+# Local Redis for development. Production uses Upstash — see docs/backend.md §1.
+# The API runs without this: with REDIS_URL unset the cache degrades to a
+# pass-through, so `npm run dev` works before you start anything here.
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: booking-code-redis
+    ports:
+      - '6379:6379'
+    command: redis-server --save '' --appendonly no
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
