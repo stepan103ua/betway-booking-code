@@ -1,12 +1,51 @@
-# Local Redis for development. Production uses Upstash — see docs/backend.md §1.
-# The API runs without this: with REDIS_URL unset the cache degrades to a
-# pass-through, so `npm run dev` works before you start anything here.
+# Two ways to use this file:
+#
+#   npm run redis:up     just Redis, with the API running on the host via `npm run dev`.
+#                        The everyday loop — hot reload, no image rebuild.
+#
+#   npm run docker:up    the whole thing in containers, close to what deploys.
+#                        Use it to check the image actually works before pushing.
+#
+# The API also runs with no Redis at all: with REDIS_URL unset the cache degrades to a
+# pass-through and GET /api/health reports "redis": "disabled".
+
 services:
+  api:
+    build:
+      # Repo root, not apps/api — this is an npm workspace and the install needs the root
+      # lockfile plus every workspace manifest.
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: booking-code-api
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3000}:3000'
+    environment:
+      NODE_ENV: production
+      # `redis`, not localhost: inside the compose network the service name is the hostname.
+      # This is the one value that cannot be copied from apps/api/.env.
+      REDIS_URL: redis://redis:6379
+      BETWAY_BASE_URL: ${BETWAY_BASE_URL:-https://www.betway.com.ng/appsynapse/bet-api-sr}
+      ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:3001}
+      PORT: 3000
+    depends_on:
+      redis:
+        # Waits for the healthcheck below, not merely for the container to exist — otherwise
+        # the API can start against a Redis that has not finished booting.
+        condition: service_healthy
+    # Reaps zombies and forwards signals. src/index.ts handles SIGTERM to drain in-flight
+    # requests; this makes sure it actually arrives.
+    init: true
+
   redis:
     image: redis:7-alpine
     container_name: booking-code-redis
+    restart: unless-stopped
     ports:
+      # Published so `npm run dev` on the host can reach it too.
       - '6379:6379'
+    # No persistence, deliberately. Redis here is a cache and nothing in it is meant to
+    # survive a restart (docs/backend.md §5) — writing an RDB would imply otherwise.
     command: redis-server --save '' --appendonly no
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']

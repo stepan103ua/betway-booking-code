@@ -90,8 +90,8 @@ Decode — reads a code, returns its contents.
 {
   "bookingCode": "BW6E19810C",
   "totalOdds": 2.76,
-  "expiresAt": "2026-09-03T15:28:31.467+02:00",
-  "usageCount": 3219,
+  "expiresAt": null,
+  "usageCount": null,
   "selections": [
     {
       "outcomeId": "7325887411",
@@ -116,7 +116,20 @@ Decode — reads a code, returns its contents.
 Upstream: `POST .../Betting/FindBookABet`. On upstream `400 BookABetInvalidCode`, retry once
 (observed transient false negatives during research), then map to `404`.
 
-Cache: Redis, key `resolve:{code}`, TTL 30–60s.
+`expiresAt` and `usageCount` are **always `null` here**, which is why both are nullable in the
+DTO. `FindBookABet` returns only `{ selections, isBuildABet, isSingleBet, accountId }` — it
+reports what is in a slip, not how long the code lives or how many people have used it. Those
+two facts exist only in `Widget/BookingCodes` (`betway-api.md` §5), and only for the ~120 codes
+it lists; joining against it would add an upstream call to every decode to populate fields that
+stay null for most codes. Decode reports what decode can know.
+
+`totalOdds` is computed by us as the product of every leg — upstream sends no total — and
+includes inactive legs, because they are part of what the code contains. Convert recomputes
+over the legs it keeps, which is what `previousTotalOdds` is there to compare against.
+
+Cache: Redis, key `resolve:{code}`, TTL 30s — the conservative end of the 30–60s this design
+allows, since odds visibly move within seconds (`betway-api.md` §3). The code is uppercased
+before it becomes a key, so the two spellings of a case-insensitive code share one entry.
 
 ---
 

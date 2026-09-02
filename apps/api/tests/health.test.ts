@@ -14,7 +14,8 @@ import { FixturesProvider } from '../src/providers/fixtures.provider.js';
  * connected: a real endpoint answers, an unimplemented one fails in the documented shape,
  * validation rejects before reaching a service, and an unknown path 404s.
  *
- * As services get implemented, the 501 assertions below turn into real behavioural tests.
+ * Resolve has since been implemented and has its own suite in `booking-codes.test.ts`; the
+ * 501 assertion here now covers a route that genuinely is still a stub.
  */
 function buildApp(): express.Express {
   return createApp({
@@ -38,10 +39,8 @@ describe('GET /api/health', () => {
 });
 
 describe('error contract', () => {
-  it('returns ApiError for an unimplemented endpoint', async () => {
-    const response = await request(buildApp())
-      .post('/api/booking-codes/resolve')
-      .send({ code: 'BW6E19810C' });
+  it('returns ApiError for an endpoint that is not built yet', async () => {
+    const response = await request(buildApp()).get('/api/sports');
 
     expect(response.status).toBe(501);
     expect(response.body).toMatchObject({

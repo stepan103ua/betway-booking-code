@@ -65,8 +65,34 @@ Content-Type: application/json
 | `priceNumerator` / `priceDenominator` | `13` / `50` | fractional |
 | `league`, `region`, `sportId` | | |
 | `handicap`, `marketHandicap` | | for Total / Handicap markets |
-| `isMarketActive`, `isEventActive`, `isOutcomeActive` | | **staleness flags** |
+| `isMarketActive`, `isEventActive`, `isOutcomeActive` | | **staleness flags**, but see below |
 | `nestedBets` | | Build-a-Bet |
+
+Each selection also carries four **nested objects** — `price`, `outcome`, `market`,
+`sportEvent` — repeating much of the above with more detail. Three fields in them matter,
+because each is a further reason a leg cannot be bet:
+
+| Field | Meaning |
+|---|---|
+| `market.isSuspended` | market is live but trading is halted |
+| `sportEvent.isFinished` | the event has already finished |
+| `outcome.isTradingActive` | this specific outcome is not currently priced |
+
+So staleness has **six** signals, not the three top-level flags. A leg is bettable only when
+all six agree, and the nested three are the ones easy to miss — a suspended market still
+reports `isMarketActive: true`. Convert exists to drop unbettable legs, so missing these puts
+the bug straight into the feature built to prevent it.
+
+Two more things observed on real responses (2026-09-03):
+
+- **`outcomeName` is not always self-describing.** On a 1X2 market it is the team
+  (`"Arsenal"`); on a Total it is `"Over "` — with a trailing space, and meaningless alone. The
+  line lives in `marketName`, which is already fully qualified (`"Total (1.5)"`,
+  `"Liverpool FC Total (1.5)"`). Trim it and show the pair. `outcome.sbv` (`" (1.5)"`) holds the
+  line separately if a client ever needs the outcome to stand on its own.
+- **A code can decode to fewer legs than it was created with.** `BW6E42397E` was listed in the
+  public catalogue with 8 bets and decoded to 7 selections. Treat the decoded slip as the truth
+  and do not reconcile against a leg count from elsewhere.
 
 **400 response**
 
