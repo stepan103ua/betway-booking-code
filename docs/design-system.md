@@ -305,6 +305,10 @@ matching web piece.
   canonical form. If they resurface, reconcile against this, not the other way around.
 - **`AppButton.pill: false`** exists and nothing uses it — reserved for a control sitting
   flush against a square edge.
+- **The web modal is a bottom sheet only below 640px.** §4 calls the bottom sheet the one
+  modal surface; on `apps/web` a full-width sheet reads as mobile on a desktop, so
+  `components/ui/modal.tsx` renders the sheet under 640px and a centred dialog at/above it —
+  same chrome, same tokens, same `overlayScrim`. Flutter stays sheet-only (it is phone-only).
 
 ---
 
