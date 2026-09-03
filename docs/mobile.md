@@ -1,11 +1,11 @@
 # Mobile — Betway Nigeria Booking Code Product
 
 `apps/mobile` — feature-first architecture: every screen owns its own Bloc/Cubit,
-repository, and remote data source, in an identical skeleton. Only one feature exists today
-(`decode` — the slip view the brief asks for), but the structure is the same one a second or
-third screen (Create, Convert) would drop into without restructuring anything already built.
-That's the point of feature-first: the shape of the codebase doesn't change when the app
-grows, only the number of `features/*` folders does.
+repository, and remote data source, in an identical skeleton. Two features are built —
+`decode` (the slip view the brief asks for) and `create` (build a slip from scratch, generate
+a code) — and `create` was added by copying `decode`'s four-layer shape, not by restructuring
+anything. That's the point of feature-first: the shape of the codebase doesn't change when the
+app grows, only the number of `features/*` folders does. `convert` is still a placeholder.
 
 Checked against the official Bloc library architecture docs (bloclibrary.dev) and pub.dev
 package pages, not recalled from memory. Pin the exact Flutter/Dart version with
@@ -49,18 +49,29 @@ lib/
           booking_code_repository.dart             abstract interface
       presentation/
         cubit/
-          slip_cubit.dart
-          slip_state.dart
+          slip_cubit.dart / popular_codes_cubit.dart
         pages/
           decode_screen.dart
-        widgets/
-          slip_card.dart
-    # features/create/  and  features/convert/  would mirror this exact skeleton
-    # if the Flutter scope ever grows past the one screen the brief asks for
+    create/                          same four layers as decode/
+      data/{datasources,repositories}/
+      domain/repositories/
+      presentation/
+        cubit/
+          create_cubit.dart          sports + draft + generate
+          events_cubit.dart          the paginated fixture list
+          event_markets_cubit.dart   markets for one event, scoped to the sheet
+        model/
+          draft_pick.dart            UI-only leg shape — see §3
+        pages/create_screen.dart
+        widgets/                     sport_selector, event_tile, market_picker_sheet,
+                                     draft_tray, created_code_view, outcome_chip
+    convert/                         a placeholder EmptyState, no data/domain yet
+  design/                            ported design-system tokens + core widget kit
+  widgets/slip/                      slip anatomy shared across features (SelectionRow, SlipCard, …)
   models/
-    slip.dart                       Slip, Selection — freezed, mirrors packages/contracts
-                                     shared across features, so it lives above features/,
-                                     not inside any one of them
+    slip.dart, selection.dart        mirror packages/contracts §0, shared above features/
+    fixture.dart                     Fixture, Market, MarketOutcome — for Create's browse
+    events_page.dart, popular_codes_page.dart, sport.dart
   main.dart
 ```
 
@@ -95,6 +106,13 @@ API returns and what the UI needs, so the split has no job to do. If Create or C
 needs a UI-only shape that isn't what the API returns, that's the moment to introduce it —
 not before.
 
+Create reached that moment. `DraftPick` (`features/create/presentation/model/draft_pick.dart`)
+is a leg the user has added while building a slip, before any code exists — an aggregate of
+`Fixture` + `Market` + `MarketOutcome` that no single endpoint returns. It lives in
+`presentation/`, not `lib/models/`, precisely because `lib/models/` mirrors the API DTOs and
+this deliberately does not. It carries a `toSelection()` so the shared `SelectionRow` still
+renders it.
+
 ---
 
 ## 4. State management — Cubit, not Bloc
@@ -103,9 +121,16 @@ not before.
 several places in the UI can trigger the same transition) and `Cubit` (methods emit states
 directly). Decode has exactly one trigger, "code submitted," so `Bloc` would mean a one-member
 `Event` hierarchy for a single event. `Cubit` is proportional here; Create's picker, with
-several distinct triggers (select outcome, remove outcome, generate), is the more plausible
-future candidate for `Bloc` instead — a decision to make when that feature is actually built,
-not a rule applied uniformly today.
+several distinct triggers (select outcome, remove outcome, generate), was the more plausible
+candidate for `Bloc`.
+
+Create is built now, and it stayed on `Cubit` — three of them, split by concern rather than
+one fat cubit or one event hierarchy: `CreateCubit` (sport list, the draft, generate),
+`EventsCubit` (the paginated fixture list, its own load / load-more triggers and its own
+failure surface), and a per-sheet `EventMarketsCubit`. Each has one job and is
+`bloc_test`-able in isolation, and the app carries no `Event` classes anywhere — the
+consistency was worth more than the explicit event log a `Bloc` would have added. `Bloc`
+remains the right call the day a single transition genuinely fires from several places.
 
 ```dart
 // slip_state.dart
@@ -187,8 +212,14 @@ class BookingCodeRepositoryImpl implements BookingCodeRepository {
 ```
 
 `Failure` lives in `core/`, not inside `features/decode/`, for the same reason `models/`
-does — every future feature's repository throws the same three shapes, and the Cubit-side
-`switch (failure) { ... }` pattern is identical across features.
+does — the Cubit-side `switch (failure) { ... }` pattern is identical across features.
+
+Decode uses the three shapes above. Create adds four more to the same shared hierarchy —
+`NotFoundFailure` (event has no markets), `TooManyOutcomesFailure` and
+`OutcomesUnavailableFailure` (the two `POST /api/booking-codes` 400s a client can act on
+differently), told apart by the `ApiError.error` code rather than the status. This is the
+"richer hierarchy once a feature has more than one 4xx to tell apart" the three-shape rule
+anticipated, not a departure from it.
 
 `Either<Failure, Slip>` (via `dartz`/`fpdart`) is the more "purist" functional alternative to
 throw/catch here — deliberately not used. It's a real, defensible choice on a larger team; for
@@ -281,12 +312,17 @@ fixture-provider tests (`docs/backend.md` §7): every layer is verifiable in iso
 
 ## 9. Adding a second screen
 
-Concretely, what "scalable" buys: adding Create later is `features/create/{data,domain,
-presentation}/`, copying the same four files with `Create` substituted for `Decode`, a new
-`Failure` subtype only if Create fails in a way Decode doesn't, and one more block in
-`core/di.dart`. Nothing in `core/`, `models/`, or `features/decode/` changes. That's the
-concrete test of whether "feature-first" was real or just a folder name — a second feature
-should cost roughly the same to add as the first one did.
+Concretely, what "scalable" bought: Create was `features/create/{data,domain,presentation}/`
+in the same four-layer shape, four new `Failure` subtypes (§5), new DTO models for the browse
+endpoints (§2), and one more block in `core/di.dart`. Nothing in `core/`, `models/slip.dart`,
+`widgets/slip/`, or `features/decode/` changed. Create is larger than Decode — a
+three-step picker and a bottom sheet rather than one input — so it grew to three cubits and a
+handful of feature-local widgets, but every one of those sits inside `features/create/` and
+the seams are the same. That's the concrete test of whether "feature-first" was real: the
+second feature cost roughly what the first one's shape promised.
+
+`convert` is still the untouched placeholder — the same `EmptyState` treatment, for the same
+reason (a flow that hands back a hardcoded code is worse than one that says it isn't built).
 
 ---
 
@@ -298,6 +334,20 @@ event/market/outcome/odds/kick-off, inactive-row treatment. `decode_screen.dart`
 `switch (state) { SlipInitial() => ..., SlipLoading() => ..., SlipLoaded(:final slip) => ...,
 SlipError(:final failure) => Text(failure.message) }` — Dart 3 pattern-matching over the
 freezed union, exhaustive, no default branch to accidentally fall into.
+
+Create's screen is the same idea at a larger scale: a `switch` over `CreateState`
+(loading sports → picker → success), the picker itself a `switch` over `EventsState`, and
+the sheet a `switch` over `EventMarketsState`. The draft tray and success recap both reuse
+`SlipCard` / `SelectionRow` unchanged — `DraftPick.toSelection()` is the only glue. Outcome
+odds get the same mono odds face and the running total the same `oddsHero` treatment the
+decoded slip's total does.
+
+The picker enforces **one pick per match**: once an event has a leg in the draft, its other
+outcomes go disabled (inline and in the sheet) with a one-line note. A booking code is a plain
+accumulator, so two legs on one event conflict — `POST /api/booking-codes` rejects such a slip
+as `conflicting_selections` (`docs/betway-api.md` §3), and this keeps the user from hitting
+that. `CreateCubit.toggleOutcome` also drops a conflicting add, so a race can't slip one past
+the disabled chips.
 
 ---
 
@@ -313,11 +363,14 @@ through Apple review.
 
 ## 12. Explicitly not used, and why
 
-- **Domain `Entity` distinct from `Slip`** — §3. No divergence to justify the mapper yet.
-- **`Bloc` (event classes) over `Cubit`** for Decode — §4. One trigger doesn't need a named
-  event log; revisit per-feature as each one is built, not as a blanket rule.
-- **`Either`/`dartz`/`fpdart`** — §5. Throw/catch expresses the same three outcomes;
-  `bloc_test` verifies the same states either way.
+- **Domain `Entity` distinct from `Slip`** — §3. `DraftPick` is a presentation shape, not a
+  domain entity with a mapper to and from an identical model.
+- **`Bloc` (event classes) over `Cubit`** — §4. Decode has one trigger; Create has several
+  but stayed on `Cubit` (three of them, split by concern) to keep the app free of `Event`
+  classes. `Bloc` still fits the day one transition fires from several places.
+- **`Either`/`dartz`/`fpdart`** — §5. Throw/catch expresses the same outcomes; `bloc_test`
+  verifies the same states either way, and Create's larger `Failure` hierarchy doesn't
+  change that.
 - **Riverpod / GetX for state management** — `flutter_bloc` chosen deliberately over the
   author's own production background with GetX (eKreative), to demonstrate range.
 - **Golden tests / integration tests** — one screen shipped, two days; layer-isolated unit

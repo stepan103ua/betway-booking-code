@@ -1,6 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 
+import '../features/create/data/datasources/create_remote_data_source.dart';
+import '../features/create/data/repositories/create_repository_impl.dart';
+import '../features/create/domain/repositories/create_repository.dart';
+import '../features/create/presentation/cubit/create_cubit.dart';
+import '../features/create/presentation/cubit/event_markets_cubit.dart';
+import '../features/create/presentation/cubit/events_cubit.dart';
 import '../features/decode/data/datasources/booking_code_remote_data_source.dart';
 import '../features/decode/data/repositories/booking_code_repository_impl.dart';
 import '../features/decode/domain/repositories/booking_code_repository.dart';
@@ -27,4 +33,14 @@ void setupDependencies() {
   );
   getIt.registerFactory(() => SlipCubit(getIt()));
   getIt.registerFactory(() => PopularCodesCubit(getIt()));
+
+  getIt.registerLazySingleton<CreateRemoteDataSource>(
+    () => CreateRemoteDataSource(getIt()),
+  );
+  getIt.registerLazySingleton<CreateRepository>(
+    () => CreateRepositoryImpl(getIt()),
+  );
+  getIt.registerFactory(() => CreateCubit(getIt()));
+  getIt.registerFactory(() => EventsCubit(getIt()));
+  getIt.registerFactory(() => EventMarketsCubit(getIt()));
 }

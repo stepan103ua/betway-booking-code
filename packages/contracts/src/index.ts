@@ -18,6 +18,13 @@
 /** One pick on a slip. */
 export type Selection = {
   outcomeId: string;
+  /**
+   * The event this pick is on. A booking code is a plain accumulator, so two selections that
+   * share an `eventId` conflict — Betway mints a code from them anyway, but it fails betslip
+   * validation ("conflicting selections, please revise"). `POST /api/booking-codes` and
+   * `/convert` reject such a slip; see `docs/betway-api.md` §3.
+   */
+  eventId: string;
   marketName: string;
   outcomeName: string;
   eventName: string;

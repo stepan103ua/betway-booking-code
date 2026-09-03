@@ -35,25 +35,32 @@ lib/
   design/            ported design-system tokens + core widget kit (Button, Card, Badge, ...)
   widgets/slip/       the slip anatomy — shared across every feature, same reason models/
                       sits above features/
-  models/             Slip, Selection — freezed + json_serializable, mirror
+  models/             Slip, Selection, Fixture (Market, MarketOutcome), EventsPage, Sport,
+                      PopularCodesPage — freezed + json_serializable, mirror
                       docs/backend-api.md §0 field for field
   core/
     network/dio_client.dart   the one Dio instance
     di.dart                    get_it registrations
     failure.dart                shared Failure hierarchy
   features/
-    decode/{data,domain,presentation}/   the only feature with a data layer today
-    create/, convert/                    a placeholder `EmptyState` each, no data/domain yet
+    decode/{data,domain,presentation}/   resolve + popular codes
+    create/{data,domain,presentation}/   sport → event → markets picker → generate a code
+    convert/                              a placeholder `EmptyState`, no data/domain yet
   shell/app_shell.dart   header + mode tabs
   main.dart
 ```
 
-`features/create/` and `features/convert/` are intentionally incomplete: each screen is an
-`EmptyState` saying plainly that it isn't built, not a picker or a flow that looks functional
-and hands back a hardcoded fake code — a working-looking screen with no real endpoint behind it
-is worse than one that says so. Wiring either to `apps/api` means giving it the same four-layer
-skeleton `features/decode/` already has — copy the shape, don't invent a different one, and
-don't reach for demo/fixture data to fill it in the meantime.
+`features/convert/` is intentionally incomplete: its screen is an `EmptyState` saying plainly
+that it isn't built, not a flow that looks functional and hands back a hardcoded fake code — a
+working-looking screen with no real endpoint behind it is worse than one that says so. Wiring
+it to `apps/api` means giving it the same four-layer skeleton `features/decode/` and
+`features/create/` already have — copy the shape, don't invent a different one, and don't
+reach for demo/fixture data to fill it in the meantime.
+
+`features/create/` follows that skeleton with three cubits rather than one (`CreateCubit`,
+`EventsCubit`, `EventMarketsCubit` — split by concern, still all `Cubit`, see `docs/mobile.md`
+§4) and a `presentation/model/draft_pick.dart` — the one UI-only shape the app has, sanctioned
+by `docs/mobile.md` §3 because a draft leg is not any endpoint's response.
 
 ## Commands
 

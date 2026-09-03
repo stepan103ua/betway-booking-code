@@ -181,9 +181,24 @@ An empty `outcomes` array is the one input it does reject:
 from this endpoint maps to `upstream_error` rather than being reflected back as a client
 error. Our schema requires at least one selection, so this is not reachable through the API.
 
----
+**`BookABet` does not validate that the selections can coexist** (verified 2026-09-03).
+Posting two or more outcomes from the *same event* — a 1X2 pick and a Total on the same match,
+or even home and draw from one 1X2 market — returns `200` and a well-formed code. Decoding it
+returns every leg, all `isActive: true`. The conflict surfaces only when the code reaches a
+betslip, which answers *"There are conflicting selections in your Betslip, please revise"* and
+will not let the bet be placed. A booking code is a plain accumulator (`isSingleBet: false`),
+and an accumulator cannot hold correlated legs from one event; a "same game multi" is a
+different product (`isBuildABet`, `nestedBets`), out of scope here.
 
-## 4. CREATE flow — sport → event → market → outcome
+This is the same shape of trap as the dead-id case above: the encode response is
+indistinguishable from a good one, and `FindBookABet` decodes the bad code without complaint.
+So the service applies the same defence — decode the code it just created and, this time,
+check that no two legs share an `eventId` (`BookingCodesService`, mapped from
+`selection.eventId`, added to the DTO for exactly this). A slip that fails the check is
+rejected as `conflicting_selections` rather than handed over as a code the user cannot use.
+The round-trip example above (`BW6E45553D`, 1X2 home & draw from one event) is itself such a
+conflicting code — it round-trips through decode ⇄ encode cleanly, which is all that example
+was checking, but it would not place as a bet.
 
 This is the real substance of the Create screen. Four steps, four endpoints, all anonymous
 GET.

@@ -68,6 +68,7 @@ void main() {
         'selections': [
           {
             'outcomeId': '7325887411',
+            'eventId': '73258874',
             'marketName': '1X2',
             'outcomeName': 'Mamelodi Sundowns',
             'eventName': 'Mamelodi Sundowns vs. Milford FC',
@@ -101,6 +102,7 @@ void main() {
         'selections': [
           {
             'outcomeId': '1',
+            'eventId': '10',
             'marketName': '1X2',
             'outcomeName': 'Home',
             'eventName': 'A vs. B',

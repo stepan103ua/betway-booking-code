@@ -28,6 +28,7 @@ function loadFixture(name: string): unknown {
 function rawSelection(overrides: Record<string, unknown> = {}) {
   return {
     outcomeId: '7393972418total=1.5~12',
+    eventId: 73939724,
     marketName: 'Total (1.5)',
     outcomeName: 'Over ',
     eventName: 'Independiente Santa Fe vs. America de Cali Sa',
@@ -62,6 +63,7 @@ describe('toSlip — against the real capture', () => {
   it('produces a Selection matching the documented DTO', () => {
     expect(slip.selections[0]).toEqual({
       outcomeId: expect.any(String),
+      eventId: expect.any(String),
       marketName: expect.any(String),
       outcomeName: expect.any(String),
       eventName: expect.any(String),

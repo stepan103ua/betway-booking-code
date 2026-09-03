@@ -28,6 +28,13 @@ export const ERROR_CODES = {
    */
   outcomes_unavailable: 400,
   /**
+   * Two or more selections are on the same event. A booking code is a plain accumulator, so
+   * these conflict — Betway encodes them without complaint and only rejects at the betslip
+   * ("conflicting selections, please revise"). Detected on the create/convert read-back; see
+   * `BookingCodesService` and docs/betway-api.md §3.
+   */
+  conflicting_selections: 400,
+  /**
    * Convert was asked to drop every leg, or every remaining leg was already dead. There is
    * nothing left to encode, and `ConvertResult.bookingCode` has no "no code" representation.
    */

@@ -32,6 +32,9 @@ import type { CatalogueCode } from './booking-code-provider.js';
  */
 const selectionSchema = z.object({
   outcomeId: z.string(),
+  // Read so the service can reject a slip with two legs on one event — a conflict Betway
+  // encodes without complaint and only rejects at the betslip (docs/betway-api.md §3).
+  eventId: z.number(),
   marketName: z.string(),
   outcomeName: z.string(),
   eventName: z.string(),
@@ -81,6 +84,8 @@ export function parseFindBookABet(body: unknown): FindBookABetResponse {
 function toSelection(raw: FindBookABetResponse['selections'][number]): Selection {
   return {
     outcomeId: raw.outcomeId,
+    // Number upstream, string in the DTO — ids cross the wire as strings everywhere else here.
+    eventId: String(raw.eventId),
     marketName: raw.marketName.trim(),
     // On Totals markets this arrives as `"Over "` — trailing space, and meaningless on its
     // own. The line it refers to is already in `marketName` ("Total (1.5)"), so trimming is

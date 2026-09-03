@@ -1,10 +1,14 @@
 /// Shared error hierarchy — every feature's repository throws one of these,
-/// every feature's Cubit catches one of these. `docs/mobile.md` §5, kept to
-/// the exact three shapes it specifies: Decode's whole failure surface is
-/// "the code doesn't exist" (404), "the network failed", or "something else
-/// went wrong" — a richer, per-error-code hierarchy is worth it once a
-/// feature (Create, Convert) actually has more than one 4xx outcome to tell
-/// apart.
+/// every feature's Cubit catches one of these. `docs/mobile.md` §5.
+///
+/// Decode's whole failure surface is "the code doesn't exist" (404), "the
+/// network failed", or "something else went wrong". Create is where the
+/// "richer, per-error-code hierarchy" that section anticipated actually
+/// earns its place (`docs/mobile.md` §9): `POST /api/booking-codes` has two
+/// distinct 400s a client can act on differently — [TooManyOutcomesFailure]
+/// ("remove a leg") and [OutcomesUnavailableFailure] ("refresh and re-pick").
+/// Both are told apart by the `error` field, which the contract
+/// (`packages/contracts`) says clients branch on.
 ///
 /// `Either<Failure, T>` (`dartz`/`fpdart`) is the more "purist" alternative
 /// to throw/catch — deliberately not used here, per the same section: it's a
@@ -25,4 +29,28 @@ class InvalidCodeFailure extends Failure {
 
 class UnknownFailure extends Failure {
   const UnknownFailure(super.message);
+}
+
+/// `404` from `GET /api/events/:eventId/markets` — the event is unknown or has
+/// nothing priced on it. Distinct from [InvalidCodeFailure] because the two
+/// read differently in the UI: one is "that's not a code", this is "there's
+/// nothing to bet on here yet".
+class NotFoundFailure extends Failure {
+  const NotFoundFailure(super.message);
+}
+
+/// `400 too_many_outcomes` from `POST /api/booking-codes`. The picker caps the
+/// draft at 20 client-side, so this should not normally be reachable — it
+/// exists so a server that changes its cap still surfaces something the user
+/// can act on rather than a generic error.
+class TooManyOutcomesFailure extends Failure {
+  const TooManyOutcomesFailure(super.message);
+}
+
+/// `400 outcomes_unavailable` from `POST /api/booking-codes` — one or more
+/// picked selections went off between picking and generating (the soccer feed
+/// is largely eSoccer, kicking off every ~15 min, so a leg can die mid-pick).
+/// Carries the server's own message, which is written to be shown verbatim.
+class OutcomesUnavailableFailure extends Failure {
+  const OutcomesUnavailableFailure(super.message);
 }
