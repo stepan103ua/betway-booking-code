@@ -1,7 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import type { ZodType } from 'zod';
 
-import { AppError } from '../lib/errors.js';
+import { AppError, ERROR_CODES, type ErrorCode } from '../lib/errors.js';
 
 /**
  * Zod validation at the route edge, before anything reaches a service.
@@ -19,7 +19,7 @@ export function validateBody<T>(schema: ZodType<T>): RequestHandler {
     const result = schema.safeParse(req.body);
 
     if (!result.success) {
-      next(new AppError('invalid_request', formatIssues(result.error.issues)));
+      next(new AppError(errorCodeFor(result.error.issues), formatIssues(result.error.issues)));
       return;
     }
 
@@ -33,7 +33,7 @@ export function validateQuery<T>(schema: ZodType<T>): RequestHandler {
     const result = schema.safeParse(req.query);
 
     if (!result.success) {
-      next(new AppError('invalid_request', formatIssues(result.error.issues)));
+      next(new AppError(errorCodeFor(result.error.issues), formatIssues(result.error.issues)));
       return;
     }
 
@@ -58,7 +58,7 @@ export function validateParams<T>(schema: ZodType<T>): RequestHandler {
     const result = schema.safeParse(req.params);
 
     if (!result.success) {
-      next(new AppError('invalid_request', formatIssues(result.error.issues)));
+      next(new AppError(errorCodeFor(result.error.issues), formatIssues(result.error.issues)));
       return;
     }
 
@@ -72,7 +72,21 @@ export function validatedParams<T>(res: Response): T {
   return res.locals.params as T;
 }
 
-type Issue = { path: PropertyKey[]; message: string };
+type Issue = { path: PropertyKey[]; message: string; params?: Record<string, unknown> };
+
+/**
+ * Most validation failures are `invalid_request`, but a few have their own documented code —
+ * `too_many_outcomes` for an oversized slip (docs/backend-api.md §1). Rather than teach this
+ * middleware which endpoint is which, a schema declares the code on its own issue and this
+ * reads it back. The middleware stays generic; the mapping lives next to the rule it belongs to.
+ */
+function errorCodeFor(issues: readonly Issue[]): ErrorCode {
+  for (const issue of issues) {
+    const code = issue.params?.errorCode;
+    if (typeof code === 'string' && code in ERROR_CODES) return code as ErrorCode;
+  }
+  return 'invalid_request';
+}
 
 function formatIssues(issues: readonly Issue[]): string {
   return issues

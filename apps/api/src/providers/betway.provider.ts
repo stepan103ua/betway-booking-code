@@ -12,7 +12,7 @@ import {
   toMarkets,
   toSports,
 } from './betway.catalogue.mapper.js';
-import { parseFindBookABet, toSlip } from './betway.mapper.js';
+import { parseBookABet, parseFindBookABet, toSlip } from './betway.mapper.js';
 
 /**
  * The live Betway implementation. Endpoints, payloads and quirks are all documented and
@@ -21,7 +21,7 @@ import { parseFindBookABet, toSlip } from './betway.mapper.js';
  * Anonymous throughout: no auth, no signature, no captcha, no cookies. Cloudflare guards
  * Betway's HTML, not its API, so a plain server-side `fetch` is sufficient (§8).
  *
- * Still stubs: encode and popular codes.
+ * Still a stub: popular codes.
  */
 
 /**
@@ -34,6 +34,9 @@ import { parseFindBookABet, toSlip } from './betway.mapper.js';
 const REQUEST_TIMEOUT_MS = 5_000;
 
 const FIND_BOOK_A_BET_PATH = '/v2/Betting/FindBookABet';
+
+/** **v1**, unlike `FindBookABet` which is v2 (docs/betway-api.md §3). Not a typo. */
+const BOOK_A_BET_PATH = '/v1/Betting/BookABet';
 
 /**
  * Betway serves this product from three hosts (docs/betway-api.md §7). Grouping them keeps
@@ -74,8 +77,24 @@ export class BetwayProvider implements BookingCodeProvider {
     return toSlip(parseFindBookABet(body), code);
   }
 
-  async encode(_outcomeIds: string[]): Promise<string> {
-    throw AppError.notImplemented('Betway encode');
+  /**
+   * Create a booking code (docs/betway-api.md §3).
+   *
+   * **Never retried.** `resolve` retries once because a 400 there is a documented flake and
+   * reading twice is free; this call creates state upstream. A retry after an ambiguous
+   * failure — a timeout where the request actually landed — mints a second code that nobody
+   * holds, and the caller still only learns about one.
+   */
+  async encode(outcomeIds: string[]): Promise<string> {
+    const response = await this.postJson(`${this.hosts.base}${BOOK_A_BET_PATH}`, {
+      cultureCode: 'en-US',
+      countryCode: 'NG',
+      isSingleBet: false,
+      // `outcomeId` alone per selection is sufficient — verified live, nothing else required.
+      outcomes: outcomeIds.map((outcomeId) => ({ outcomeId })),
+    });
+
+    return parseBookABet(await this.readBody(response));
   }
 
   async popularCodes(_limit: number): Promise<PopularBookingCode[]> {

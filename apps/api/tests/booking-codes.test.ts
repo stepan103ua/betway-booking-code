@@ -28,6 +28,28 @@ function buildApp(
 
 const VALID_CODE = 'BW6E487423';
 
+/** Records what the service asked the cache for, and serves a real read-through. */
+function recordingCache() {
+  const calls: { key: string; ttl: number }[] = [];
+  const store = new Map<string, unknown>();
+
+  const cache: Cache = {
+    async cached(key, ttl, compute) {
+      calls.push({ key, ttl });
+      if (store.has(key)) return store.get(key) as never;
+      const value = await compute();
+      store.set(key, value);
+      return value;
+    },
+    async status() {
+      return 'ok';
+    },
+    async close() {},
+  };
+
+  return { cache, calls };
+}
+
 describe('POST /api/booking-codes/resolve', () => {
   it('returns a Slip matching the documented contract', async () => {
     const response = await request(buildApp())
@@ -123,28 +145,6 @@ describe('POST /api/booking-codes/resolve', () => {
 });
 
 describe('caching', () => {
-  /** Records what the service asked the cache for, and serves a real read-through. */
-  function recordingCache() {
-    const calls: { key: string; ttl: number }[] = [];
-    const store = new Map<string, unknown>();
-
-    const cache: Cache = {
-      async cached(key, ttl, compute) {
-        calls.push({ key, ttl });
-        if (store.has(key)) return store.get(key) as never;
-        const value = await compute();
-        store.set(key, value);
-        return value;
-      },
-      async status() {
-        return 'ok';
-      },
-      async close() {},
-    };
-
-    return { cache, calls };
-  }
-
   let provider: FixturesProvider;
 
   beforeEach(() => {
@@ -217,5 +217,109 @@ describe('caching', () => {
     await request(app).post('/api/booking-codes/resolve').send({ code: VALID_CODE.toLowerCase() });
 
     expect(resolve).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('POST /api/booking-codes', () => {
+  /** Outcome ids present in `find-book-a-bet.json` — the ones the double can honour. */
+  const OUTCOME_IDS = ['7222123211', '7253089213'];
+
+  /** Well-formed, but not in the capture: what a selection that has gone dead looks like. */
+  const DEAD_OUTCOME_ID = '9999999911';
+
+  it('returns a booking code in the documented shape', async () => {
+    const response = await request(buildApp()).post('/api/booking-codes').send({
+      outcomeIds: OUTCOME_IDS,
+    });
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(response.body)).toEqual(['bookingCode']);
+    // Round-trippable: what we hand back must satisfy the schema `/resolve` validates with.
+    expect(response.body.bookingCode).toMatch(/^BW[0-9A-F]{8}$/);
+  });
+
+  it('gives an oversized slip its own error code, not a generic invalid_request', async () => {
+    // "Remove a selection" is a different UI from "your request was malformed", which is why
+    // docs/backend-api.md §1 gives this its own code.
+    const outcomeIds = Array.from({ length: 21 }, (_, i) => `74263200${i}`);
+
+    const response = await request(buildApp()).post('/api/booking-codes').send({ outcomeIds });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('too_many_outcomes');
+    expect(response.body.message).toContain('at most 20');
+  });
+
+  it.each([
+    ['an empty array', []],
+    ['a non-id string', ['not-an-outcome']],
+    ['an empty id', ['']],
+  ])('rejects %s before it reaches upstream', async (_name, outcomeIds) => {
+    const response = await request(buildApp()).post('/api/booking-codes').send({ outcomeIds });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('invalid_request');
+  });
+
+  it.each([
+    ['every selection is dead', [DEAD_OUTCOME_ID], 'Refresh and pick again'],
+    ['only some are', [OUTCOME_IDS[0]!, DEAD_OUTCOME_ID], '1 of your 2 selections'],
+  ])('refuses to hand back a code missing legs when %s', async (_name, outcomeIds, message) => {
+    // Upstream accepts a dead outcome id, drops it, and still returns a well-formed code. That
+    // code decodes to fewer legs than asked for — or to nothing, which /resolve then 404s.
+    const response = await request(buildApp()).post('/api/booking-codes').send({ outcomeIds });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('outcomes_unavailable');
+    expect(response.body.message).toContain(message);
+  });
+
+  it('returns a code that this API can actually resolve', async () => {
+    const app = buildApp();
+
+    const created = await request(app).post('/api/booking-codes').send({
+      outcomeIds: OUTCOME_IDS,
+    });
+    const resolved = await request(app)
+      .post('/api/booking-codes/resolve')
+      .send({ code: created.body.bookingCode });
+
+    // The bug this guards: create used to return 200 for a code /resolve answered 404 for.
+    expect(resolved.status).toBe(200);
+    expect(resolved.body.selections.map((s: { outcomeId: string }) => s.outcomeId).sort()).toEqual(
+      [...OUTCOME_IDS].sort(),
+    );
+  });
+
+  it('still returns the code when verification itself fails', async () => {
+    // A timeout on the read-back says nothing about whether the code exists — and it probably
+    // does. Failing here would report a create that actually worked as broken.
+    const provider = new FixturesProvider();
+    vi.spyOn(provider, 'resolve').mockRejectedValue(
+      new AppError('upstream_timeout', 'Betway did not respond in time.'),
+    );
+
+    const response = await request(buildApp({ provider })).post('/api/booking-codes').send({
+      outcomeIds: OUTCOME_IDS,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.bookingCode).toMatch(/^BW[0-9A-F]{8}$/);
+  });
+
+  it('never caches — two identical creates must both reach upstream', async () => {
+    // Caching this would hand two callers the same code for slips built minutes apart, with
+    // the odds moved in between. It is a write (docs/backend.md §5).
+    const provider = new FixturesProvider();
+    const upstream = vi.spyOn(provider, 'encode');
+    const { cache, calls } = recordingCache();
+    const app = buildApp({ provider, cache });
+
+    await request(app).post('/api/booking-codes').send({ outcomeIds: OUTCOME_IDS });
+    await request(app).post('/api/booking-codes').send({ outcomeIds: OUTCOME_IDS });
+
+    expect(upstream).toHaveBeenCalledTimes(2);
+    // The only cache traffic is the verification read-back, never the write itself.
+    expect(calls.every((call) => call.key.startsWith('resolve:'))).toBe(true);
   });
 });

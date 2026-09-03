@@ -141,6 +141,46 @@ worth surfacing in the UI ("odds shown may differ from the moment the code was c
 Anonymous, `apiVersion: v1` (not v2 like FindBookABet). No cap found on `outcomes.length`
 during testing.
 
+**`BookABet` does not validate outcome ids** (verified 2026-09-03). Posting a single
+nonexistent id, `00000000000`, returned `200 {"bookingCode":"BW6E59F360"}` — a real,
+well-formed code. Decoding it returns `{"selections": []}`.
+
+That is worth stating plainly: **a code can be created that contains nothing**, and our own
+`/api/booking-codes/resolve` answers `404 invalid_code` for it, because a zero-selection slip
+is not a slip. So the naive encode hands a user a code that the next endpoint rejects.
+
+There is no way to detect this from the encode response alone — it is indistinguishable from a
+successful create, so **the service decodes the code it just created and checks the leg count**
+(`BookingCodesService.create`). Shape validation alone is not enough and it is worth being
+precise about why: the dangerous ids are not junk, they are *well-formed ids that have gone
+dead*. The soccer feed is largely eSoccer, kicking off every ~15 minutes, so an outcome can
+expire between a user opening the picker and pressing create. That is the ordinary path, not
+an edge case.
+
+Once a selection has expired, the code decodes as `400 BookABetSelectionsExpired`:
+
+```json
+{ "errorCode": 6000332, "errorMessage": "BookABetSelectionsExpired", "responseMetadata": null }
+```
+
+Note this is the *second* distinct 400 from `FindBookABet` — `6000331 BookABetInvalidCode` is
+the unknown-code one from §2. Both map to `invalid_code`, and both go through the retry, which
+is correct: neither carries information a client should see.
+
+The related case is already recorded in §2: a code can decode to *fewer* legs than it was
+created with, because outcomes are withdrawn between the two calls. Total loss is that same
+effect taken to its limit, not a separate bug.
+
+An empty `outcomes` array is the one input it does reject:
+
+```json
+{ "errorCode": 10, "errorMessage": "UnexpectedError", "responseMetadata": null }
+```
+
+`400`, and the message carries no indication of which field was wrong — which is why a 400
+from this endpoint maps to `upstream_error` rather than being reflected back as a client
+error. Our schema requires at least one selection, so this is not reachable through the API.
+
 ---
 
 ## 4. CREATE flow — sport → event → market → outcome

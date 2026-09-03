@@ -1,6 +1,7 @@
 import type { ConvertResult, PopularBookingCode, Slip } from '@booking-code/contracts';
 
 import { AppError, isAppError } from '../lib/errors.js';
+import { logger } from '../lib/logger.js';
 import type { Cache } from '../lib/redis.js';
 import type { BookingCodeProvider } from '../providers/booking-code-provider.js';
 
@@ -8,7 +9,7 @@ import type { BookingCodeProvider } from '../providers/booking-code-provider.js'
  * Business logic: the provider fetches and normalises, the controller only maps HTTP in and
  * out, and cache policy lives here.
  *
- * Still TODO — create, convert and popular:
+ * Still TODO — convert and popular:
  *
  *   - **Convert.** Not an upstream call. `resolve` → drop `dropOutcomeIds` and anything with
  *     `isActive: false` → `encode` the rest → return both codes and both totals
@@ -78,8 +79,63 @@ export class BookingCodesService {
     return result.slip;
   }
 
-  async create(_outcomeIds: string[]): Promise<string> {
-    throw AppError.notImplemented('Create');
+  /**
+   * Encode a set of selections into a new code, then check the code actually contains them.
+   *
+   * **The second call is not belt-and-braces, it is the feature.** `BookABet` accepts outcome
+   * ids that are no longer bettable, silently drops them, and still returns a well-formed code
+   * (docs/betway-api.md §3). Ask it for one dead selection and you get a code containing
+   * nothing — which `/resolve` then answers 404 for, because a slip with no legs is not a slip.
+   *
+   * That is not a hand-crafted-request edge case. The soccer feed is largely eSoccer, kicking
+   * off every ~15 minutes, so an outcome can die between a user opening the picker and pressing
+   * create. Shape validation cannot see it: the id is perfectly well-formed, it is just dead.
+   *
+   * The cost is one extra upstream call on the rarest operation, and it is paid back in part —
+   * the verification populates the resolve cache, so the client's next call is a hit.
+   *
+   * **Never cached.** Caching the result would hand two callers the same code for different
+   * slips; caching by input would hand back a code created minutes ago with moved odds. It is
+   * a write, and writes reach Betway (docs/backend.md §5).
+   */
+  async create(outcomeIds: string[]): Promise<string> {
+    const bookingCode = await this.provider.encode(outcomeIds);
+
+    const slip = await this.verify(bookingCode);
+    // Verification itself failed — a timeout, a 502. The code probably exists, so returning it
+    // beats telling the caller their create failed when it may well have worked.
+    if (slip === null) return bookingCode;
+
+    const created = new Set(slip.selections.map((selection) => selection.outcomeId));
+    const dropped = outcomeIds.filter((outcomeId) => !created.has(outcomeId));
+
+    if (dropped.length > 0) {
+      // Failing beats returning a code quietly missing legs: the user believes they booked a
+      // slip they did not. Dropping legs on purpose is what `/convert` is for.
+      throw new AppError(
+        'outcomes_unavailable',
+        dropped.length === outcomeIds.length
+          ? 'Those selections are no longer available. Refresh and pick again.'
+          : `${dropped.length} of your ${outcomeIds.length} selections are no longer available.`,
+      );
+    }
+
+    return bookingCode;
+  }
+
+  /** Reads back a code just created. `null` means we could not tell, not that it is empty. */
+  private async verify(bookingCode: string): Promise<Slip | null> {
+    try {
+      return await this.resolve(bookingCode);
+    } catch (error) {
+      // A code containing nothing decodes to nothing, which `toSlip` reports as invalid_code.
+      if (isAppError(error) && error.code === 'invalid_code') {
+        return { bookingCode, totalOdds: 1, expiresAt: null, usageCount: null, selections: [] };
+      }
+
+      logger.warn('could not verify a newly created code', { code: bookingCode });
+      return null;
+    }
   }
 
   async convert(_code: string, _dropOutcomeIds: string[]): Promise<ConvertResult> {

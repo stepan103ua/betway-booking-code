@@ -21,6 +21,12 @@ export const ERROR_CODES = {
   invalid_code: 404,
   /** More selections than this API accepts. See docs/backend-api.md §1. */
   too_many_outcomes: 400,
+  /**
+   * One or more selections were no longer bettable by the time the code was created. Upstream
+   * accepts them silently and drops them, so this is detected after the fact — see
+   * `BookingCodesService.create`.
+   */
+  outcomes_unavailable: 400,
   not_found: 404,
   rate_limited: 429,
   /** Route exists in the contract but is not built yet. */
