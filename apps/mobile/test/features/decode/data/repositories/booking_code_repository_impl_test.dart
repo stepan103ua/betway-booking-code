@@ -32,6 +32,7 @@ void main() {
     selections: [
       Selection(
         outcomeId: '1',
+        eventId: '10',
         marketName: '1X2',
         outcomeName: 'Home',
         eventName: 'A vs. B',

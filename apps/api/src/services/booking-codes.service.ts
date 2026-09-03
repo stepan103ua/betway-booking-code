@@ -207,6 +207,20 @@ export class BookingCodesService {
       throw new AppError('outcomes_unavailable', describeDropped(dropped.length));
     }
 
+    // A booking code is a plain accumulator, so two legs on one event conflict. `BookABet`
+    // encodes them anyway and `FindBookABet` decodes them, so the read-back above passes —
+    // the code only fails when it reaches a betslip ("conflicting selections, please revise",
+    // docs/betway-api.md §3). This is the one place we can catch it before handing the code
+    // over. Convert hits the same wall: it cannot merge two same-event legs either, and the
+    // fix there is to drop one via `dropOutcomeIds`.
+    const events = verified.selections.map((selection) => selection.eventId);
+    if (new Set(events).size < events.length) {
+      throw new AppError(
+        'conflicting_selections',
+        'This slip has more than one selection on the same match, which a booking code cannot combine. Remove the extra pick and try again.',
+      );
+    }
+
     return { bookingCode, slip: verified };
   }
 

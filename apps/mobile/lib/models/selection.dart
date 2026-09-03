@@ -18,6 +18,11 @@ part 'selection.g.dart';
 abstract class Selection with _$Selection {
   const factory Selection({
     required String outcomeId,
+
+    /// The event this leg is on. Two legs sharing an `eventId` conflict in a
+    /// booking code — the Create picker uses this to keep one pick per match
+    /// (`docs/backend-api.md` §1, `docs/betway-api.md` §3).
+    required String eventId,
     required String marketName,
     required String outcomeName,
     required String eventName,

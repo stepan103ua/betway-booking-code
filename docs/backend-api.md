@@ -25,6 +25,7 @@ references them instead of restating fields.
 ```ts
 type Selection = {
   outcomeId: string;
+  eventId: string;   // two legs sharing this conflict — see POST /api/booking-codes
   marketName: string;
   outcomeName: string;
   eventName: string;
@@ -108,6 +109,7 @@ Decode — reads a code, returns its contents.
   "selections": [
     {
       "outcomeId": "7325887411",
+      "eventId": "73258874",
       "marketName": "1X2",
       "outcomeName": "Mamelodi Sundowns",
       "eventName": "Mamelodi Sundowns vs. Milford FC",
@@ -200,6 +202,18 @@ Partial loss fails too rather than quietly returning a shorter slip — a user w
 and received a three-leg code did not get what they asked for. Dropping legs deliberately is
 what `/api/booking-codes/convert` is for.
 
+Two or more selections on the **same event** is `conflicting_selections`:
+
+```json
+{ "error": "conflicting_selections", "message": "This slip has more than one selection on the same match, which a booking code cannot combine. Remove the extra pick and try again." }
+```
+
+A booking code is a plain accumulator, so correlated legs from one event cannot coexist —
+Betway encodes them and `FindBookABet` decodes them without complaint, and the conflict only
+appears at the betslip (`docs/betway-api.md` §3). Caught on the same read-back as
+`outcomes_unavailable`: after the code is decoded, its `selections` are checked for a repeated
+`eventId`.
+
 Everything else — a missing array, an empty one, a malformed id — is `invalid_request`.
 
 Upstream: `POST .../Betting/BookABet` with `{ cultureCode, countryCode, isSingleBet, outcomes:
@@ -258,7 +272,9 @@ between resolve and encode (`docs/betway-api.md` §3), so recomputing from the o
 report a total the new code does not actually have; `previousTotalOdds` carries the before side
 of the diff. The read may be served from cache; the encode never is. Like `POST
 /api/booking-codes`, the new code is read back and checked before it is returned, so a leg that
-dies mid-flight surfaces as `outcomes_unavailable` rather than as a code quietly missing legs.
+dies mid-flight surfaces as `outcomes_unavailable` rather than as a code quietly missing legs,
+and a code whose kept legs include two on one event fails as `conflicting_selections` — Convert
+cannot merge those either, and the fix is to drop one of them via `dropOutcomeIds`.
 
 If that read-back is itself inconclusive — a timeout, a `502` — the conversion still returns
 `200`, and the selections it reports are what was true at the resolve rather than something
@@ -466,7 +482,18 @@ considered and deliberately left out rather than added to satisfy the checklist.
 
 **Web** (Next.js) uses all of the above.
 
-**Flutter** uses exactly one endpoint: `POST /api/booking-codes/resolve`. The task specifies a
-single rough screen — code input plus slip view — so Create and Convert stay web-only. The
-`Slip` DTO is the same JSON shape on both sides; the Dart model is a straight mirror of the TS
-type, not a reinterpretation.
+**Flutter** uses the Decode and Create surfaces:
+
+- Decode — `POST /api/booking-codes/resolve` and `GET /api/booking-codes/popular`.
+- Create — `GET /api/sports`, `GET /api/events`, `GET /api/events/:eventId/markets` and
+  `POST /api/booking-codes`, driving a sport → event → markets picker.
+
+Convert stays web-only — on a single bookmaker it is `resolve → filter → encode` with no
+new upstream shape, so it earns its place on the client that already has the other two
+screens, not on the second one. Every DTO is the same JSON on both sides; the Dart models in
+`apps/mobile/lib/models/` mirror the TS types field for field, not a reinterpretation.
+
+`POST /api/booking-codes` returns only `{ bookingCode }`. The client cannot show a verified
+slip for a freshly created code without a second `resolve`, so the Create success screen
+recaps the selections the user picked (with the odds held at pick time) and says plainly
+that live prices may have moved — the same drift the Decode screen already surfaces.

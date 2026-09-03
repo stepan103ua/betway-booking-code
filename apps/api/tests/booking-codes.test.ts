@@ -73,6 +73,7 @@ describe('POST /api/booking-codes/resolve', () => {
       'usageCount',
     ]);
     expect(Object.keys(slip.selections[0]!).sort()).toEqual([
+      'eventId',
       'eventName',
       'isActive',
       'kickoffAt',
@@ -291,6 +292,50 @@ describe('POST /api/booking-codes', () => {
     expect(resolved.body.selections.map((s: { outcomeId: string }) => s.outcomeId).sort()).toEqual(
       [...OUTCOME_IDS].sort(),
     );
+  });
+
+  it('refuses a slip with two selections on the same match', async () => {
+    // A booking code is a plain accumulator, so same-event legs conflict. Betway encodes and
+    // decodes them without complaint — the code only fails at the betslip — so the read-back
+    // is what has to catch it (docs/betway-api.md §3).
+    const provider = new FixturesProvider();
+    vi.spyOn(provider, 'resolve').mockResolvedValue({
+      bookingCode: 'BW0000000C',
+      totalOdds: 3.2,
+      expiresAt: null,
+      usageCount: null,
+      selections: [
+        {
+          outcomeId: OUTCOME_IDS[0]!,
+          eventId: '55',
+          marketName: '1X2',
+          outcomeName: 'Home',
+          eventName: 'A vs. B',
+          league: 'L',
+          kickoffAt: '2026-09-03T18:00:00.000Z',
+          odds: 1.8,
+          isActive: true,
+        },
+        {
+          outcomeId: OUTCOME_IDS[1]!,
+          eventId: '55',
+          marketName: 'Total (2.5)',
+          outcomeName: 'Over',
+          eventName: 'A vs. B',
+          league: 'L',
+          kickoffAt: '2026-09-03T18:00:00.000Z',
+          odds: 1.78,
+          isActive: true,
+        },
+      ],
+    });
+
+    const response = await request(buildApp({ provider })).post('/api/booking-codes').send({
+      outcomeIds: OUTCOME_IDS,
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('conflicting_selections');
   });
 
   it('still returns the code when verification itself fails', async () => {
