@@ -2,6 +2,7 @@ import type { ConvertResult, PopularBookingCode, Slip } from '@booking-code/cont
 
 import { AppError, isAppError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
+import { totalOdds } from '../lib/odds.js';
 import type { Cache } from '../lib/redis.js';
 import type { BookingCodeProvider } from '../providers/booking-code-provider.js';
 
@@ -9,14 +10,7 @@ import type { BookingCodeProvider } from '../providers/booking-code-provider.js'
  * Business logic: the provider fetches and normalises, the controller only maps HTTP in and
  * out, and cache policy lives here.
  *
- * Still TODO — convert and popular:
- *
- *   - **Convert.** Not an upstream call. `resolve` → drop `dropOutcomeIds` and anything with
- *     `isActive: false` → `encode` the rest → return both codes and both totals
- *     (docs/backend-api.md §1). Recompute `totalOdds` from the kept legs; do not carry the
- *     original total forward.
- *   - **The empty-slip case.** Dropping every leg leaves nothing to encode. Decide what that
- *     returns before writing the happy path — it is the edge case a reviewer will reach for.
+ * Still TODO: popular codes.
  */
 
 /**
@@ -99,47 +93,139 @@ export class BookingCodesService {
    * a write, and writes reach Betway (docs/backend.md §5).
    */
   async create(outcomeIds: string[]): Promise<string> {
-    const bookingCode = await this.provider.encode(outcomeIds);
-
-    const slip = await this.verify(bookingCode);
-    // Verification itself failed — a timeout, a 502. The code probably exists, so returning it
-    // beats telling the caller their create failed when it may well have worked.
-    if (slip === null) return bookingCode;
-
-    const created = new Set(slip.selections.map((selection) => selection.outcomeId));
-    const dropped = outcomeIds.filter((outcomeId) => !created.has(outcomeId));
-
-    if (dropped.length > 0) {
-      // Failing beats returning a code quietly missing legs: the user believes they booked a
-      // slip they did not. Dropping legs on purpose is what `/convert` is for.
-      throw new AppError(
-        'outcomes_unavailable',
-        dropped.length === outcomeIds.length
-          ? 'Those selections are no longer available. Refresh and pick again.'
-          : `${dropped.length} of your ${outcomeIds.length} selections are no longer available.`,
-      );
-    }
+    const { bookingCode } = await this.encodeVerified(outcomeIds, (dropped) =>
+      dropped === outcomeIds.length
+        ? 'Those selections are no longer available. Refresh and pick again.'
+        : `${dropped} of your ${outcomeIds.length} selections are no longer available.`,
+    );
 
     return bookingCode;
   }
 
-  /** Reads back a code just created. `null` means we could not tell, not that it is empty. */
-  private async verify(bookingCode: string): Promise<Slip | null> {
+  /**
+   * Reissue a code for the same bet, minus the legs asked for and minus anything already dead.
+   *
+   * Betway has no convert endpoint — this is `resolve` → filter → `encode`, composed here
+   * (docs/architecture.md §3). The read is allowed to come from cache; the encode is a write
+   * and never does.
+   *
+   * The result is the **decoded new code**, not the old slip with legs removed. That matters
+   * because prices move between the two calls — a leg resolved at 2.27 can encode and decode
+   * at 2.17 (docs/betway-api.md §3) — so recomputing from the old slip would report a total
+   * the new code does not have. `previousTotalOdds` carries the before side of the diff.
+   */
+  async convert(code: string, dropOutcomeIds: string[]): Promise<ConvertResult> {
+    const original = await this.resolve(code);
+
+    const drop = new Set(dropOutcomeIds);
+    // Ids that are not in the slip are ignored rather than rejected: the client is describing
+    // what it wants gone, and a leg that is already absent is not an error.
+    const kept = original.selections.filter(
+      (selection) => !drop.has(selection.outcomeId) && selection.isActive,
+    );
+
+    if (kept.length === 0) {
+      // `ConvertResult.bookingCode` is not nullable, so there is no 200 that honestly says
+      // "nothing left". A 400 the client can render beats inventing a shape.
+      throw new AppError(
+        'empty_slip',
+        drop.size > 0
+          ? 'Dropping those leaves nothing to convert.'
+          : 'None of the selections in that code can still be bet.',
+      );
+    }
+
+    const { bookingCode, slip } = await this.encodeVerified(
+      kept.map((selection) => selection.outcomeId),
+      // Different advice from `create`'s: this caller supplied a code, not a set of picks, so
+      // there is nothing for them to go and re-pick. Converting again is the fix — the leg that
+      // just died will be filtered by `isActive` on the next pass.
+      (dropped) =>
+        dropped === kept.length
+          ? 'Those selections went off while the code was being converted. Try again.'
+          : `${dropped} of the ${kept.length} remaining selections went off while the code was being converted. Try again.`,
+    );
+
+    return {
+      // Falls back to the kept legs when the read-back was inconclusive — same reasoning as
+      // `create`: an unverifiable code is probably still a good one. Note the after-side of the
+      // diff is then our best knowledge as of the resolve, not something we confirmed.
+      ...(slip ?? {
+        bookingCode,
+        totalOdds: totalOdds(kept),
+        expiresAt: null,
+        usageCount: null,
+        selections: kept,
+      }),
+      previousBookingCode: original.bookingCode,
+      previousTotalOdds: original.totalOdds,
+      // Every leg that is not in the new code, whether the client asked or it was already dead.
+      droppedCount: original.selections.length - kept.length,
+    };
+  }
+
+  /**
+   * Encode, then read the code back and check it contains what was asked for.
+   *
+   * `BookABet` accepts outcome ids that are no longer bettable, drops them silently, and still
+   * returns a well-formed code (docs/betway-api.md §3). Both callers need that caught, and
+   * Convert needs the decoded slip as well — returning it here saves a second read, since the
+   * verification has already populated the resolve cache.
+   *
+   * A `null` slip means verification was inconclusive, not that the code is empty.
+   */
+  private async encodeVerified(
+    outcomeIds: string[],
+    describeDropped: (dropped: number) => string,
+  ): Promise<{ bookingCode: string; slip: Slip | null }> {
+    const bookingCode = await this.provider.encode(outcomeIds);
+    const verified = await this.verify(bookingCode);
+
+    if (verified === null) return { bookingCode, slip: null };
+
+    // Failing beats returning a code quietly missing legs: the user believes they booked a slip
+    // they did not. Dropping legs on purpose is what `/convert` is for. The message comes from
+    // the caller because only it knows what the user was doing, and these render verbatim.
+    if (verified === 'empty') {
+      throw new AppError('outcomes_unavailable', describeDropped(outcomeIds.length));
+    }
+
+    const created = new Set(verified.selections.map((selection) => selection.outcomeId));
+    const dropped = outcomeIds.filter((outcomeId) => !created.has(outcomeId));
+
+    if (dropped.length > 0) {
+      throw new AppError('outcomes_unavailable', describeDropped(dropped.length));
+    }
+
+    return { bookingCode, slip: verified };
+  }
+
+  /**
+   * Reads back a code just created. Three outcomes, deliberately distinct types:
+   *
+   *   - a `Slip` — the code exists and this is what is in it
+   *   - `'empty'` — the code exists and contains nothing, so upstream dropped every leg
+   *   - `null` — we could not tell, which is not the same as either of the above
+   *
+   * `'empty'` used to be a fabricated zero-leg `Slip`. That was safe only because both callers
+   * happened to reject it first; as a sentinel it was one refactor away from being serialised
+   * into a response as a real slip with `totalOdds: 1`.
+   */
+  private async verify(bookingCode: string): Promise<Slip | 'empty' | null> {
     try {
       return await this.resolve(bookingCode);
     } catch (error) {
       // A code containing nothing decodes to nothing, which `toSlip` reports as invalid_code.
-      if (isAppError(error) && error.code === 'invalid_code') {
-        return { bookingCode, totalOdds: 1, expiresAt: null, usageCount: null, selections: [] };
-      }
+      if (isAppError(error) && error.code === 'invalid_code') return 'empty';
 
-      logger.warn('could not verify a newly created code', { code: bookingCode });
+      // Worth an operator's attention: we created something upstream and cannot say what is in
+      // it, so any leg count we go on to report is unconfirmed.
+      logger.warn('created a booking code but could not read it back', {
+        code: bookingCode,
+        reason: isAppError(error) ? error.code : 'unknown',
+      });
       return null;
     }
-  }
-
-  async convert(_code: string, _dropOutcomeIds: string[]): Promise<ConvertResult> {
-    throw AppError.notImplemented('Convert');
   }
 
   async popular(_limit: number): Promise<PopularBookingCode[]> {

@@ -233,11 +233,38 @@ Convert — reissue a code for the same bet, optionally dropping dead legs.
 }
 ```
 
+**Response `400`** — `ApiError`, when nothing survives the filter:
+
+```json
+{ "error": "empty_slip", "message": "Dropping those leaves nothing to convert." }
+```
+
+`bookingCode` is not nullable, so there is no honest `200` for "nothing left"; the message
+distinguishes dropping every leg from a code whose legs are all already dead.
+
+**Response `404`** — `invalid_code`, the same as `/resolve`, since that is the first step.
+
 Not a separate Betway call — implemented server-side as `resolve` → filter out
 `dropOutcomeIds` (and, by default, any selection with `isActive: false`) → `encode`. Worth
 stating plainly in the README: on a single bookmaker this is close to tautological; the real
 complexity of Convert is cross-bookmaker market mapping, which is out of scope here but is
 exactly the seam the DTO layer is built to support later.
+
+`dropOutcomeIds` that are not in the slip are ignored rather than rejected — the client is
+describing what it wants gone, and a leg already absent is not an error.
+
+The response body is the **decoded new code**, not the old slip with legs removed. Prices move
+between resolve and encode (`docs/betway-api.md` §3), so recomputing from the old slip would
+report a total the new code does not actually have; `previousTotalOdds` carries the before side
+of the diff. The read may be served from cache; the encode never is. Like `POST
+/api/booking-codes`, the new code is read back and checked before it is returned, so a leg that
+dies mid-flight surfaces as `outcomes_unavailable` rather than as a code quietly missing legs.
+
+If that read-back is itself inconclusive — a timeout, a `502` — the conversion still returns
+`200`, and the selections it reports are what was true at the resolve rather than something
+confirmed against the new code. Failing a conversion that probably worked is the worse answer,
+and the alternative is a response field that would be meaningless on all but a handful of
+requests. The event is logged at `warn` with the code, so an operator can tell it apart.
 
 ---
 

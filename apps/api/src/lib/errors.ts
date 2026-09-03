@@ -27,6 +27,11 @@ export const ERROR_CODES = {
    * `BookingCodesService.create`.
    */
   outcomes_unavailable: 400,
+  /**
+   * Convert was asked to drop every leg, or every remaining leg was already dead. There is
+   * nothing left to encode, and `ConvertResult.bookingCode` has no "no code" representation.
+   */
+  empty_slip: 400,
   not_found: 404,
   rate_limited: 429,
   /** Route exists in the contract but is not built yet. */

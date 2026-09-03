@@ -19,7 +19,7 @@ export function validateBody<T>(schema: ZodType<T>): RequestHandler {
     const result = schema.safeParse(req.body);
 
     if (!result.success) {
-      next(new AppError(errorCodeFor(result.error.issues), formatIssues(result.error.issues)));
+      next(validationError(result.error.issues));
       return;
     }
 
@@ -33,7 +33,7 @@ export function validateQuery<T>(schema: ZodType<T>): RequestHandler {
     const result = schema.safeParse(req.query);
 
     if (!result.success) {
-      next(new AppError(errorCodeFor(result.error.issues), formatIssues(result.error.issues)));
+      next(validationError(result.error.issues));
       return;
     }
 
@@ -58,7 +58,7 @@ export function validateParams<T>(schema: ZodType<T>): RequestHandler {
     const result = schema.safeParse(req.params);
 
     if (!result.success) {
-      next(new AppError(errorCodeFor(result.error.issues), formatIssues(result.error.issues)));
+      next(validationError(result.error.issues));
       return;
     }
 
@@ -79,13 +79,30 @@ type Issue = { path: PropertyKey[]; message: string; params?: Record<string, unk
  * `too_many_outcomes` for an oversized slip (docs/backend-api.md §1). Rather than teach this
  * middleware which endpoint is which, a schema declares the code on its own issue and this
  * reads it back. The middleware stays generic; the mapping lives next to the rule it belongs to.
+ *
+ * Only 4xx codes are honoured. A schema is describing what the *caller* got wrong, so letting
+ * one declare `upstream_error` or `internal_error` would report a bad request as an incident —
+ * and the whole value of these codes is that a bug and an expected outcome look different in
+ * the logs.
+ *
+ * Generic failures keep the `field: message` form, because there "which field" is the useful
+ * half. A declared code does not, because the schema already wrote the whole sentence.
  */
-function errorCodeFor(issues: readonly Issue[]): ErrorCode {
+function validationError(issues: readonly Issue[]): AppError {
   for (const issue of issues) {
     const code = issue.params?.errorCode;
-    if (typeof code === 'string' && code in ERROR_CODES) return code as ErrorCode;
+    if (typeof code !== 'string' || !(code in ERROR_CODES)) continue;
+
+    const candidate = code as ErrorCode;
+    if (ERROR_CODES[candidate] < 400 || ERROR_CODES[candidate] >= 500) continue;
+
+    // A schema that declared its own code also wrote a finished sentence for it, so it is used
+    // as-is. Prefixing it with the field path ("outcomeIds: A slip can hold at most 20…") turns
+    // a line meant for a user back into a developer's assertion.
+    return new AppError(candidate, issue.message);
   }
-  return 'invalid_request';
+
+  return new AppError('invalid_request', formatIssues(issues));
 }
 
 function formatIssues(issues: readonly Issue[]): string {
