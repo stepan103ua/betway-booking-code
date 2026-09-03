@@ -36,6 +36,9 @@ Two rules carry most of the weight here, both from `docs/backend-api.md` §0 and
   with a sentence a user can read; the original goes to the log.
 - Codes are part of the contract. Clients branch on `error`, so renaming one is a breaking
   change even though nothing type-checks against it.
+- A schema may declare its own code for one specific violation (`too_many_outcomes` rather than
+  a generic `invalid_request`) so the client can act on it. Only 4xx codes are valid there — a
+  validation failure reporting as `upstream_error` makes a bad request look like an incident.
 
 ## Status mapping
 
@@ -43,6 +46,8 @@ Two rules carry most of the weight here, both from `docs/backend-api.md` §0 and
 |---|---|---|
 | malformed body or query | 400 | `invalid_request` |
 | more than 20 outcomes | 400 | `too_many_outcomes` |
+| a selection is no longer bettable at encode time | 400 | `outcomes_unavailable` |
+| Convert has no legs left to encode | 400 | `empty_slip` |
 | code well-formed, upstream has no slip | 404 | `invalid_code` |
 | unknown path | 404 | `not_found` |
 | rate limit tripped | 429 | `rate_limited` |

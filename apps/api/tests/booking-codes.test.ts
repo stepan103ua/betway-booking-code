@@ -247,7 +247,9 @@ describe('POST /api/booking-codes', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBe('too_many_outcomes');
-    expect(response.body.message).toContain('at most 20');
+    // Exactly the sentence docs/backend-api.md §1 promises — no `outcomeIds:` path prefix,
+    // because a declared code means the schema wrote a line meant for a user.
+    expect(response.body.message).toBe('A slip can hold at most 20 selections.');
   });
 
   it.each([
@@ -321,5 +323,180 @@ describe('POST /api/booking-codes', () => {
     expect(upstream).toHaveBeenCalledTimes(2);
     // The only cache traffic is the verification read-back, never the write itself.
     expect(calls.every((call) => call.key.startsWith('resolve:'))).toBe(true);
+  });
+});
+
+describe('POST /api/booking-codes/convert', () => {
+  /** `STALE_CODE` resolves to a four-leg slip with two legs unbettable. */
+  const LIVE_LEGS = ['7222123211', '7253089213'];
+
+  async function convert(body: Record<string, unknown>, app = buildApp()) {
+    return request(app).post('/api/booking-codes/convert').send(body);
+  }
+
+  it('drops dead legs without being asked, and returns the documented shape', async () => {
+    const response = await convert({ code: STALE_CODE });
+
+    expect(response.status).toBe(200);
+    expect(Object.keys(response.body).sort()).toEqual([
+      'bookingCode',
+      'droppedCount',
+      'expiresAt',
+      'previousBookingCode',
+      'previousTotalOdds',
+      'selections',
+      'totalOdds',
+      'usageCount',
+    ]);
+    expect(response.body.previousBookingCode).toBe(STALE_CODE);
+    expect(response.body.bookingCode).not.toBe(STALE_CODE);
+    expect(response.body.droppedCount).toBe(2);
+    expect(response.body.selections.map((s: { outcomeId: string }) => s.outcomeId).sort()).toEqual(
+      [...LIVE_LEGS].sort(),
+    );
+  });
+
+  it('recomputes the total over the kept legs instead of carrying the old one forward', async () => {
+    const response = await convert({ code: STALE_CODE });
+
+    // The whole point of the before/after diff: two different numbers, and the new one is the
+    // product of what survived.
+    expect(response.body.totalOdds).not.toBe(response.body.previousTotalOdds);
+    const product = response.body.selections.reduce(
+      (total: number, s: { odds: number }) => total * s.odds,
+      1,
+    );
+    expect(response.body.totalOdds).toBeCloseTo(Math.round(product * 100) / 100, 2);
+  });
+
+  it('drops the legs the client asks for on top of the dead ones', async () => {
+    const response = await convert({ code: STALE_CODE, dropOutcomeIds: [LIVE_LEGS[0]!] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.droppedCount).toBe(3);
+    expect(response.body.selections).toHaveLength(1);
+    expect(response.body.selections[0].outcomeId).toBe(LIVE_LEGS[1]);
+  });
+
+  it('ignores a dropOutcomeId that is not in the slip', async () => {
+    // The client is describing what it wants gone; a leg already absent is not an error.
+    const response = await convert({ code: STALE_CODE, dropOutcomeIds: ['7426320011'] });
+
+    expect(response.status).toBe(200);
+    expect(response.body.droppedCount).toBe(2);
+  });
+
+  it('400s when the client drops every remaining leg', async () => {
+    const response = await convert({ code: STALE_CODE, dropOutcomeIds: LIVE_LEGS });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('empty_slip');
+    expect(response.body.message).toContain('nothing to convert');
+  });
+
+  it('400s when nothing in the code can still be bet', async () => {
+    const provider = new FixturesProvider();
+    const slip = await provider.resolve('BW6E487423');
+    vi.spyOn(provider, 'resolve').mockResolvedValue({
+      ...slip,
+      selections: slip.selections.map((selection) => ({ ...selection, isActive: false })),
+    });
+
+    const response = await convert({ code: 'BW6E487423' }, buildApp({ provider }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('empty_slip');
+    expect(response.body.message).toContain('can still be bet');
+  });
+
+  it('reads through the cache but never caches the new code', async () => {
+    const { cache, calls } = recordingCache();
+
+    await convert({ code: STALE_CODE }, buildApp({ cache }));
+
+    // The read may be cached (docs/backend.md §5); the encode is a write and must not be.
+    expect(calls.every((call) => call.key.startsWith('resolve:'))).toBe(true);
+    expect(calls.some((call) => call.key === `resolve:${STALE_CODE}`)).toBe(true);
+  });
+
+  it('404s an unknown code, like resolve does', async () => {
+    const response = await convert({ code: UNKNOWN_CODE });
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toBe('invalid_code');
+  });
+
+  /**
+   * A leg can die between Convert's resolve and its encode — the read may be up to 30s stale,
+   * and upstream drops the dead leg silently. These drive the shared `encodeVerified` path
+   * through Convert rather than Create, because the two need different advice: Convert's caller
+   * supplied a code, so "pick again" is impossible for them.
+   */
+  describe('a leg dying between the resolve and the encode', () => {
+    /** Makes the read-back of the *new* code omit `missing`, as upstream would. */
+    function providerDropping(missing: string[]): FixturesProvider {
+      const provider = new FixturesProvider();
+      const real = provider.resolve.bind(provider);
+
+      vi.spyOn(provider, 'resolve').mockImplementation(async (code: string) => {
+        const slip = await real(code);
+        if (code === STALE_CODE) return slip;
+        return {
+          ...slip,
+          selections: slip.selections.filter((s) => !missing.includes(s.outcomeId)),
+        };
+      });
+
+      return provider;
+    }
+
+    it('refuses the code and tells the user to convert again, not to pick again', async () => {
+      const app = buildApp({ provider: providerDropping([LIVE_LEGS[0]!]) });
+
+      const response = await convert({ code: STALE_CODE }, app);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('outcomes_unavailable');
+      expect(response.body.message).toContain('Try again');
+      // Create's wording. There is nothing for a Convert caller to re-pick.
+      expect(response.body.message).not.toContain('pick again');
+    });
+
+    it('says how many went when only some did', async () => {
+      const app = buildApp({ provider: providerDropping([LIVE_LEGS[0]!]) });
+
+      const response = await convert({ code: STALE_CODE }, app);
+
+      expect(response.body.message).toContain('1 of the 2 remaining selections');
+    });
+
+    it('still refuses when every remaining leg goes', async () => {
+      const app = buildApp({ provider: providerDropping(LIVE_LEGS) });
+
+      const response = await convert({ code: STALE_CODE }, app);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('outcomes_unavailable');
+      expect(response.body.message).toContain('Try again');
+    });
+  });
+
+  it('returns the kept legs when the read-back is inconclusive', async () => {
+    // A timeout on the read says nothing about whether the code is good, so Convert answers
+    // with what it knew at resolve time rather than failing a conversion that probably worked.
+    const provider = new FixturesProvider();
+    const real = provider.resolve.bind(provider);
+    vi.spyOn(provider, 'resolve').mockImplementation(async (code: string) => {
+      if (code === STALE_CODE) return real(code);
+      throw new AppError('upstream_timeout', 'Betway did not respond in time.');
+    });
+
+    const response = await convert({ code: STALE_CODE }, buildApp({ provider }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.droppedCount).toBe(2);
+    expect(response.body.selections.map((s: { outcomeId: string }) => s.outcomeId).sort()).toEqual(
+      [...LIVE_LEGS].sort(),
+    );
   });
 });

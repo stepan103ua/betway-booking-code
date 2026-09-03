@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { Selection, Slip } from '@booking-code/contracts';
 
 import { AppError } from '../lib/errors.js';
+import { totalOdds } from '../lib/odds.js';
 
 /**
  * Betway's response shape → our DTOs. The whole of the upstream vocabulary stops here.
@@ -132,25 +133,6 @@ export function toSlip(raw: FindBookABetResponse, bookingCode: string): Slip {
     usageCount: null,
     selections,
   };
-}
-
-/**
- * Accumulator odds multiply. Rounded to 2dp because the product of decimals accumulates
- * float noise fast — seven legs is enough to turn 2.76 into 2.7600000000000007.
- *
- * Computed over every leg that has a price, including inactive ones: this is what the code
- * contains. Convert recomputes over the legs it keeps, which is why its result carries
- * `previousTotalOdds`.
- *
- * Unpriced legs are skipped rather than multiplied in, since a 0 would collapse the whole
- * accumulator and report a total nobody's slip has.
- */
-function totalOdds(selections: Selection[]): number {
-  const product = selections
-    .filter((selection) => selection.odds > 0)
-    .reduce((total, selection) => total * selection.odds, 1);
-
-  return Math.round(product * 100) / 100;
 }
 
 /**
