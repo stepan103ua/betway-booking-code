@@ -179,6 +179,8 @@ const catalogueEntrySchema = z.object({
 
 export const widgetBookingCodesSchema = z.object({
   data: z.array(catalogueEntrySchema),
+  /** How many codes the catalogue holds — 120 at time of writing. Drives `hasMore`. */
+  total: z.number().nullish(),
 });
 
 export function parseWidgetBookingCodes(body: unknown): z.infer<typeof widgetBookingCodesSchema> {
@@ -195,6 +197,16 @@ export function parseWidgetBookingCodes(body: unknown): z.infer<typeof widgetBoo
 }
 
 /** Order is upstream's — already sorted by usage — so it is preserved rather than re-sorted. */
+export function toCataloguePage(raw: z.infer<typeof widgetBookingCodesSchema>): {
+  codes: CatalogueCode[];
+  total: number;
+} {
+  const codes = toCatalogueCodes(raw);
+  // A missing total would make `hasMore` always false and strand the rest of the catalogue.
+  // Falling back to what this page held keeps paging honest: it stops, rather than lying.
+  return { codes, total: raw.total ?? codes.length };
+}
+
 export function toCatalogueCodes(raw: z.infer<typeof widgetBookingCodesSchema>): CatalogueCode[] {
   return raw.data.map((entry) => ({
     bookingCode: entry.bookingCode.trim().toUpperCase(),

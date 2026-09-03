@@ -13,8 +13,8 @@ export class CatalogueController {
   };
 
   events = async (_req: Request, res: Response): Promise<void> => {
-    const { sport, take } = validatedQuery<EventsQuery>(res);
-    res.json({ events: await this.service.events(sport, take) });
+    const { sport, limit, skip } = validatedQuery<EventsQuery>(res);
+    res.json(await this.service.events(sport, limit, skip));
   };
 
   eventMarkets = async (_req: Request, res: Response): Promise<void> => {

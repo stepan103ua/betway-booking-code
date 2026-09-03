@@ -31,13 +31,22 @@ export interface BookingCodeProvider {
    * that composition belongs in the service (`docs/backend-api.md` §1) — the same place
    * Convert lives, and for the same reason.
    */
-  popularCodes(limit: number): Promise<CatalogueCode[]>;
+  popularCodes(limit: number, skip: number): Promise<{ codes: CatalogueCode[]; total: number }>;
 
   /** Reference list of sports. Slow-moving. */
   sports(): Promise<Sport[]>;
 
-  /** Upcoming fixtures for a sport, with the 1X2 market inline. */
-  upcomingEvents(sportId: string, take: number): Promise<Fixture[]>;
+  /**
+   * Upcoming fixtures for a sport, with the 1X2 market inline.
+   *
+   * `hasMore` is upstream's own end-of-list flag, not a count comparison — this feed reports no
+   * total, so a page's size says nothing about whether another exists.
+   */
+  upcomingEvents(
+    sportId: string,
+    limit: number,
+    skip: number,
+  ): Promise<{ events: Fixture[]; hasMore: boolean }>;
 
   /**
    * Every market for one event, not just 1X2. Empty when the event is unknown — upstream

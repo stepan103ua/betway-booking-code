@@ -12,14 +12,14 @@ import {
   parseBetBookUpcoming,
   parseConfigSports,
   parseMarketGroup,
-  toFixtures,
+  toFixturesPage,
   toMarkets,
   toSports,
 } from './betway.catalogue.mapper.js';
 import {
   parseFindBookABet,
   parseWidgetBookingCodes,
-  toCatalogueCodes,
+  toCataloguePage,
   toSlip,
 } from './betway.mapper.js';
 
@@ -109,9 +109,14 @@ export class FixturesProvider implements BookingCodeProvider {
    * does not recognise with that capture. That is what makes the service's fan-out testable
    * without a network — a test that wants a decode to fail spies on `resolve` instead.
    */
-  async popularCodes(limit: number): Promise<CatalogueCode[]> {
-    const rows = toCatalogueCodes(parseWidgetBookingCodes(this.load('widget-booking-codes')));
-    return rows.slice(0, limit);
+  async popularCodes(
+    limit: number,
+    skip: number,
+  ): Promise<{ codes: CatalogueCode[]; total: number }> {
+    const { codes } = toCataloguePage(parseWidgetBookingCodes(this.load('widget-booking-codes')));
+    // `total` is the capture's own length, not upstream's 120 — otherwise `hasMore` would stay
+    // true past the end of the fixture and a paging test could never reach the last page.
+    return { codes: codes.slice(skip, skip + limit), total: codes.length };
   }
 
   async sports(): Promise<Sport[]> {
@@ -127,9 +132,17 @@ export class FixturesProvider implements BookingCodeProvider {
    * passed through. A double that answers questions the real thing would not is how an
    * offline suite goes green over behaviour that does not exist.
    */
-  async upcomingEvents(sportId: string, take: number): Promise<Fixture[]> {
-    if (sportId !== CAPTURED_SPORT_ID) return [];
-    return toFixtures(parseBetBookUpcoming(this.load('betbook-upcoming'))).slice(0, take);
+  async upcomingEvents(
+    sportId: string,
+    limit: number,
+    skip: number,
+  ): Promise<{ events: Fixture[]; hasMore: boolean }> {
+    if (sportId !== CAPTURED_SPORT_ID) return { events: [], hasMore: false };
+
+    const all = toFixturesPage(parseBetBookUpcoming(this.load('betbook-upcoming'))).events;
+    // Paging is applied here rather than trusted from the capture: the fixture is one page, and
+    // slicing it is what lets a test walk off the end and see `hasMore` go false.
+    return { events: all.slice(skip, skip + limit), hasMore: skip + limit < all.length };
   }
 
   async eventMarkets(eventId: string): Promise<Market[]> {

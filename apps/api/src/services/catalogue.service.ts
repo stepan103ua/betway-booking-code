@@ -1,4 +1,4 @@
-import type { Fixture, Market, Sport } from '@booking-code/contracts';
+import type { EventsPage, Market, Sport } from '@booking-code/contracts';
 
 import { AppError } from '../lib/errors.js';
 import type { Cache } from '../lib/redis.js';
@@ -34,15 +34,21 @@ export class CatalogueService {
   }
 
   /**
-   * `take` is part of the cache key rather than something we slice after the fact. Fetching
-   * the maximum once and slicing would raise the hit rate, but it makes every miss the most
-   * expensive call available; while the picker only ever asks for the default, that trade is
-   * not worth taking.
+   * `skip` and `limit` are both in the cache key rather than sliced after the fact. Caching one
+   * large page and slicing would raise the hit rate, but it makes every miss the most expensive
+   * call available — and it cannot work at all now that the client chooses its own offset.
+   *
+   * `hasMore` comes from the provider, which reads upstream's `isFinalPage`. This feed reports
+   * no total, so unlike the code catalogue there is nothing to count against.
    */
-  async events(sportId: string, take: number): Promise<Fixture[]> {
-    return this.cache.cached(`events:${sportId}:${take}`, ODDS_TTL_SECONDS, () =>
-      this.provider.upcomingEvents(sportId, take),
+  async events(sportId: string, limit: number, skip: number): Promise<EventsPage> {
+    const page = await this.cache.cached(
+      `events:${sportId}:${skip}:${limit}`,
+      ODDS_TTL_SECONDS,
+      () => this.provider.upcomingEvents(sportId, limit, skip),
     );
+
+    return { ...page, skip, limit };
   }
 
   /**

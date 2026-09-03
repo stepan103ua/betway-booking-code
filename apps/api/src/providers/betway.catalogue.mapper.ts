@@ -182,10 +182,29 @@ export const betBookUpcomingSchema = z.object({
   markets: z.array(marketSchema),
   outcomes: z.array(outcomeSchema),
   prices: z.array(priceSchema),
+  /**
+   * The feed's only paging signal — it reports no total. Optional because a missing flag should
+   * not fail the whole read; absent means "assume there is more", which costs one empty page at
+   * worst and never hides a fixture.
+   */
+  isFinalPage: z.boolean().nullish(),
 });
 
 export function parseBetBookUpcoming(body: unknown): z.infer<typeof betBookUpcomingSchema> {
   return parse(betBookUpcomingSchema, body, 'Betway returned an event list we could not read.');
+}
+
+/**
+ * `hasMore` comes from upstream's own flag rather than from how many fixtures survived
+ * filtering: a page can legitimately yield zero renderable events — every market suspended, say
+ * — while more pages remain. Deriving it from the result count would stop paging early and hide
+ * them.
+ */
+export function toFixturesPage(raw: z.infer<typeof betBookUpcomingSchema>): {
+  events: Fixture[];
+  hasMore: boolean;
+} {
+  return { events: toFixtures(raw), hasMore: raw.isFinalPage !== true };
 }
 
 export function toFixtures(raw: z.infer<typeof betBookUpcomingSchema>): Fixture[] {
