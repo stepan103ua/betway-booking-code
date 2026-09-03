@@ -4,7 +4,9 @@ import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**'],
+    // apps/web owns its own flat config (React + Next rules); linted via its own `lint`
+    // script and by `next build`, not by this root pass.
+    ignores: ['**/dist/**', '**/coverage/**', '**/node_modules/**', 'apps/web/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

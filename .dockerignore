@@ -9,6 +9,8 @@ node_modules
 # Built inside the image.
 dist
 **/dist
+.next
+**/.next
 *.tsbuildinfo
 
 # Secrets and local state must never reach an image layer — layers are readable by anyone who

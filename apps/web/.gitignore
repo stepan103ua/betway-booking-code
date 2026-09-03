@@ -1,0 +1,10 @@
+# Next.js
+/.next/
+/out/
+next-env.d.ts
+
+# Vercel
+.vercel
+
+# env — real values live in Vercel project settings, only .env.example is committed
+.env*.local
