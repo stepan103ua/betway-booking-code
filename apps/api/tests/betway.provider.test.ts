@@ -214,6 +214,56 @@ describe('retry on 400', () => {
   });
 });
 
+describe('encode', () => {
+  const OUTCOME_IDS = ['7426320011', '7426320012'];
+
+  it('posts to v1 BookABet with the documented payload', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ bookingCode: 'BW6E45553D' }));
+
+    const code = await provider.encode(OUTCOME_IDS);
+
+    expect(code).toBe('BW6E45553D');
+    const [url, init] = fetchMock.mock.calls[0]!;
+    // v1 here; FindBookABet is v2. The two differ, and "fixing" it breaks one of them.
+    expect(url).toBe(`${BASE_URL}/v1/Betting/BookABet`);
+    expect(JSON.parse(init.body as string)).toEqual({
+      cultureCode: 'en-US',
+      countryCode: 'NG',
+      isSingleBet: false,
+      outcomes: [{ outcomeId: '7426320011' }, { outcomeId: '7426320012' }],
+    });
+  });
+
+  it('is never retried, even on the 400 that resolve retries', async () => {
+    // The whole point: BookABet creates state. A retry after an ambiguous failure mints a
+    // second code nobody holds, and the caller only ever hears about one.
+    fetchMock.mockResolvedValueOnce(jsonResponse({ errorCode: 10 }, 400));
+
+    const error = await captureError(provider.encode(OUTCOME_IDS));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(error.code).toBe('upstream_error');
+  });
+
+  it('is not retried after a timeout either — the request may have landed', async () => {
+    fetchMock.mockRejectedValueOnce(new DOMException('timed out', 'TimeoutError'));
+
+    const error = await captureError(provider.encode(OUTCOME_IDS));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(error.code).toBe('upstream_timeout');
+  });
+
+  it('turns a 200 with no booking code into a 502 rather than returning undefined', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ somethingElse: true }));
+
+    const error = await captureError(provider.encode(OUTCOME_IDS));
+
+    expect(error.code).toBe('upstream_error');
+    expect(error.status).toBe(502);
+  });
+});
+
 describe('failure mapping', () => {
   it('maps a timeout to upstream_timeout, not internal_error', async () => {
     // What AbortSignal.timeout actually rejects with on Node: a DOMException named

@@ -152,3 +152,27 @@ function totalOdds(selections: Selection[]): number {
 
   return Math.round(product * 100) / 100;
 }
+
+/**
+ * `BookABet`'s response — the whole of it is one field.
+ *
+ * Validated rather than cast for the usual reason, plus a specific one: this is the only
+ * write in the service, so a malformed response here means we have created something upstream
+ * and cannot tell the caller what it is. Better a 502 than a `{ bookingCode: undefined }`.
+ */
+export const bookABetSchema = z.object({
+  bookingCode: z.string().trim().min(1),
+});
+
+export function parseBookABet(body: unknown): string {
+  const result = bookABetSchema.safeParse(body);
+
+  if (!result.success) {
+    throw AppError.upstream(
+      'Betway did not return a booking code.',
+      result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '),
+    );
+  }
+
+  return result.data.bookingCode;
+}

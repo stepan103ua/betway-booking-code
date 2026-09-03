@@ -156,10 +156,24 @@ Encode — creates a new code from a set of outcomes.
 { "outcomeIds": ["7423294011", "7423294012"] }
 ```
 
-Zod-validated: 1–20 items, each a non-empty string. Betway itself imposed no observed cap
+Zod-validated: 1–20 items, each shaped like an outcome id. Betway imposed no observed cap
 during testing, but an unbounded array on our own endpoint is an open door for someone to
 build a slip with hundreds of legs and hammer `BookABet` through us — 20 comfortably covers
 every real accumulator size and costs nothing to enforce.
+
+**This endpoint makes two upstream calls, not one.** `BookABet` accepts outcome ids that are no
+longer bettable, drops them silently, and still returns a well-formed code — so the code comes
+back, is decoded, and its legs are compared against what was asked for
+(`docs/betway-api.md` §3). Without that read-back this endpoint returns `200` with a code that
+`/resolve` immediately answers `404` for.
+
+It is not a rare case. The soccer feed is largely eSoccer with a kick-off every ~15 minutes, so
+a selection can die while the user is still picking. The id stays well-formed, so no amount of
+request validation sees it.
+
+If the read-back itself fails — a timeout, a `502` — the code is returned anyway. An
+inconclusive verification says nothing about whether the code exists, and reporting a create
+that probably worked as a failure is the worse error.
 
 **Response `200`**
 
@@ -167,7 +181,26 @@ every real accumulator size and costs nothing to enforce.
 { "bookingCode": "BW6E45553D" }
 ```
 
-**Response `400`** — `ApiError`, e.g. `{ "error": "too_many_outcomes", "message": "A slip can hold at most 20 selections." }`
+**Response `400`** — `ApiError`. Over the cap is the one validation failure with its own code,
+because it is the one a client can act on ("remove a selection" is a different UI from "your
+request was malformed"):
+
+```json
+{ "error": "too_many_outcomes", "message": "A slip can hold at most 20 selections." }
+```
+
+A selection that is no longer bettable is `outcomes_unavailable`, whether some or all of them
+went:
+
+```json
+{ "error": "outcomes_unavailable", "message": "Those selections are no longer available. Refresh and pick again." }
+```
+
+Partial loss fails too rather than quietly returning a shorter slip — a user who picked five
+and received a three-leg code did not get what they asked for. Dropping legs deliberately is
+what `/api/booking-codes/convert` is for.
+
+Everything else — a missing array, an empty one, a malformed id — is `invalid_request`.
 
 Upstream: `POST .../Betting/BookABet` with `{ cultureCode, countryCode, isSingleBet, outcomes:
 [{outcomeId}] }`. Verified live — `outcomeId` alone per selection is sufficient, no other
