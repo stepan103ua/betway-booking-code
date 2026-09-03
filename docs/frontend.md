@@ -217,6 +217,10 @@ whichever host runs `apps/api` (Railway/Fly — see `docs/backend.md` §8); if b
 up on the same platform's private network, `API_URL` can become an internal address instead
 of a public one — a later optimization, not a day-one requirement.
 
+`apps/web/Dockerfile` (Next's `output: 'standalone'`) and a `web` service in the repo's
+`docker-compose.yml` exist only so `npm run docker:up` can bring web + api + redis up
+together for a local end-to-end demo. Vercel does not use them.
+
 ---
 
 ## 10. Explicitly not used, and why

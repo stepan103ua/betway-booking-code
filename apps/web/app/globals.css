@@ -1,0 +1,150 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens — the web half of docs/design-system.md §2–3. apps/mobile/lib/design/ is the
+ * reference; a token added here is added there too, or neither. Only the semantic aliases
+ * live in `@theme` (so `bg-surface-card`, `text-text-muted` etc. exist as utilities); the raw
+ * ink/paper/lime ramps are not exposed — nothing in a screen references them directly.
+ *
+ * Dark is the default and lives on `:root`. The light theme is fully aliased but unreachable
+ * — no toggle is in scope (design-system.md §1, §8).
+ */
+@theme {
+  --color-surface-app: #08090a;
+  --color-surface-card: #151719;
+  --color-surface-raised: #1b1d20;
+  --color-surface-row: #0e0f11;
+  --color-surface-sunken: #000000;
+  --color-surface-input: #151719;
+  --color-surface-hover: #22252a;
+  --color-surface-skeleton: #22252a;
+
+  --color-border-subtle: #ffffff14;
+  --color-border-strong: #ffffff29;
+  --color-border-input: #ffffff1f;
+  --color-border-dashed: #ffffff33;
+
+  --color-text-primary: #f4f5f6;
+  --color-text-secondary: #a8adb4;
+  --color-text-muted: #71777e;
+  --color-text-disabled: #4b5057;
+  --color-text-on-accent: #08090a;
+
+  --color-accent-solid: #cff54a;
+  --color-accent-hover: #e2ff7a;
+  --color-accent-press: #b7de2e;
+  --color-accent-quiet: #cff54a1a;
+  --color-accent-text: #cff54a;
+  --color-odds-text: #cff54a;
+
+  --color-danger-solid: #ff6152;
+  --color-danger-text: #ff6152;
+  --color-danger-quiet: #ff61521f;
+  --color-warn-solid: #ffb84d;
+  --color-warn-text: #ffb84d;
+  --color-warn-quiet: #ffb84d1f;
+  --color-info-text: #6ea8ff;
+  --color-info-quiet: #6ea8ff1f;
+
+  --color-focus-ring: #cff54a;
+
+  /* Shape shortcuts (design-system.md §3): tile = sm, control = md, card = lg. */
+  --radius-tile: 12px;
+  --radius-control: 18px;
+  --radius-card: 24px;
+  --radius-pill: 999px;
+
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, 'SFMono-Regular', monospace;
+}
+
+/* Light theme — straight re-alias of the same base values (design-system.md §2). */
+:root[data-theme='light'] {
+  --color-surface-app: #f7f7f4;
+  --color-surface-card: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-surface-row: #ffffff;
+  --color-surface-sunken: #efefea;
+  --color-surface-input: #ffffff;
+  --color-surface-hover: #efefea;
+  --color-surface-skeleton: #efefea;
+
+  --color-border-subtle: #0e0f1114;
+  --color-border-strong: #0e0f1129;
+  --color-border-input: #0e0f1124;
+  --color-border-dashed: #0e0f1133;
+
+  --color-text-primary: #0e0f11;
+  --color-text-secondary: #5a5f66;
+  --color-text-muted: #82878e;
+  --color-text-disabled: #aeb2b8;
+
+  --color-accent-text: #93b420;
+  --color-odds-text: #93b420;
+}
+
+@layer base {
+  body {
+    background: var(--color-surface-app);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+/*
+ * Type roles — size / weight / leading / tracking only, never a color (design-system.md §1).
+ * A small subset for the basic setup; the rest land as screens need them.
+ */
+@layer components {
+  .type-h1 {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.015em;
+  }
+  .type-body {
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.4;
+  }
+  .type-body-strong {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: -0.015em;
+  }
+  .type-meta {
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+  }
+  .type-label {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .type-odds {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.06em;
+  }
+  .type-odds-hero {
+    font-family: var(--font-mono);
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.06em;
+  }
+  .type-code-hero {
+    font-family: var(--font-mono);
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: 0.06em;
+  }
+}

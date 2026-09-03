@@ -3,13 +3,38 @@
 #   npm run redis:up     just Redis, with the API running on the host via `npm run dev`.
 #                        The everyday loop — hot reload, no image rebuild.
 #
-#   npm run docker:up    the whole thing in containers, close to what deploys.
-#                        Use it to check the image actually works before pushing.
+#   npm run docker:up    the whole thing in containers — web + api + redis, close to what
+#                        deploys. Use it to check the images work and the three talk to each
+#                        other before pushing. (In production the web app is on Vercel and
+#                        the API on Railway/Fly — docs/frontend.md §9, docs/backend.md §8 —
+#                        so this is a local end-to-end demo, not the deploy topology.)
 #
 # The API also runs with no Redis at all: with REDIS_URL unset the cache degrades to a
 # pass-through and GET /api/health reports "redis": "disabled".
 
 services:
+  web:
+    build:
+      # Repo root, not apps/web — npm workspace, same reason as the API below.
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: booking-code-web
+    restart: unless-stopped
+    ports:
+      # 3001 on the host (the API already holds 3000); the container listens on 3000.
+      - '${WEB_PORT:-3001}:3000'
+    environment:
+      NODE_ENV: production
+      # `api`, not localhost: Server Components and Server Actions fetch this from inside the
+      # compose network. This is the one value that cannot be copied from apps/web/.env.
+      API_URL: http://api:3000
+      PORT: 3000
+    depends_on:
+      api:
+        condition: service_healthy
+    # Reaps zombies and forwards SIGTERM to the Next server (PID 1) on redeploy.
+    init: true
+
   api:
     build:
       # Repo root, not apps/api — this is an npm workspace and the install needs the root
