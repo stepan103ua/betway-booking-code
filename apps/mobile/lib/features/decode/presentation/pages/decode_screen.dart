@@ -42,7 +42,9 @@ const _betwayUrl = 'https://www.betway.com.ng';
 class DecodeScreen extends StatelessWidget {
   const DecodeScreen({super.key, this.onConvert});
 
-  final VoidCallback? onConvert;
+  /// Hands the resolved code to the Convert tab — the "Rebuild with N live
+  /// legs" action on a partly-dead slip.
+  final void Function(String code)? onConvert;
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +60,7 @@ class DecodeScreen extends StatelessWidget {
 
 class _DecodeView extends StatefulWidget {
   const _DecodeView({this.onConvert});
-  final VoidCallback? onConvert;
+  final void Function(String code)? onConvert;
 
   @override
   State<_DecodeView> createState() => _DecodeViewState();
@@ -253,7 +255,9 @@ class _DecodeViewState extends State<_DecodeView> {
                 variant: AppButtonVariant.primary,
                 icon: 'repeat',
                 fullWidth: true,
-                onPressed: widget.onConvert,
+                onPressed: widget.onConvert == null
+                    ? null
+                    : () => widget.onConvert!(slip.bookingCode),
               ),
               const SizedBox(height: 8),
               AppButton(

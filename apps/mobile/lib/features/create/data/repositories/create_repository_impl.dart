@@ -74,6 +74,13 @@ class CreateRepositoryImpl implements CreateRepository {
               message ??
                   'Those selections are no longer available. Refresh and pick again.',
             );
+          case 'conflicting_selections':
+            // The picker keeps one pick per match, so this is a defensive
+            // mapping — a race, or a future server rule change.
+            throw ConflictingSelectionsFailure(
+              message ??
+                  'Two of those selections are on the same match, which a booking code cannot combine.',
+            );
         }
       }
       throw _mapTransportFailure(e);

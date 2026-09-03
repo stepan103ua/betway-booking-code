@@ -1,6 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:get_it/get_it.dart';
 
+import '../features/convert/data/datasources/convert_remote_data_source.dart';
+import '../features/convert/data/repositories/convert_repository_impl.dart';
+import '../features/convert/domain/repositories/convert_repository.dart';
+import '../features/convert/presentation/cubit/convert_cubit.dart';
 import '../features/create/data/datasources/create_remote_data_source.dart';
 import '../features/create/data/repositories/create_repository_impl.dart';
 import '../features/create/domain/repositories/create_repository.dart';
@@ -43,4 +47,12 @@ void setupDependencies() {
   getIt.registerFactory(() => CreateCubit(getIt()));
   getIt.registerFactory(() => EventsCubit(getIt()));
   getIt.registerFactory(() => EventMarketsCubit(getIt()));
+
+  getIt.registerLazySingleton<ConvertRemoteDataSource>(
+    () => ConvertRemoteDataSource(getIt()),
+  );
+  getIt.registerLazySingleton<ConvertRepository>(
+    () => ConvertRepositoryImpl(getIt()),
+  );
+  getIt.registerFactory(() => ConvertCubit(getIt()));
 }
