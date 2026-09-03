@@ -10,8 +10,19 @@ import { z } from 'zod';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
-  /** Betway's betting API. Pinned host — see docs/betway-api.md §7. */
+  /**
+   * Betway's betting API — decode and encode. Pinned host, see docs/betway-api.md §7.
+   *
+   * Three hosts, not one, because Betway genuinely serves these from three places. Never
+   * `betway.com`: it is geo-restricted and redirects.
+   */
   BETWAY_BASE_URL: z.url().default('https://www.betway.com.ng/appsynapse/bet-api-sr'),
+
+  /** Reference data — the sport list. */
+  BETWAY_CONFIG_URL: z.url().default('https://config.betwayafrica.com'),
+
+  /** The odds feed — event lists and market groups. */
+  BETWAY_FEEDS_URL: z.url().default('https://feeds-roa2.betwayafrica.com/br/_apis/sport/v1'),
 
   /**
    * Optional. Unset means "run without a cache" — every read goes straight upstream. That
@@ -28,6 +39,8 @@ const envSchema = z.object({
 export type Config = {
   nodeEnv: 'development' | 'test' | 'production';
   betwayBaseUrl: string;
+  betwayConfigUrl: string;
+  betwayFeedsUrl: string;
   redisUrl: string | undefined;
   port: number;
   allowedOrigins: string[];
@@ -47,7 +60,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   return {
     nodeEnv: value.NODE_ENV,
-    betwayBaseUrl: value.BETWAY_BASE_URL.replace(/\/+$/, ''),
+    betwayBaseUrl: stripTrailingSlash(value.BETWAY_BASE_URL),
+    betwayConfigUrl: stripTrailingSlash(value.BETWAY_CONFIG_URL),
+    betwayFeedsUrl: stripTrailingSlash(value.BETWAY_FEEDS_URL),
     // An empty string in a .env file is "not set", not "connect to empty host".
     redisUrl: value.REDIS_URL === '' ? undefined : value.REDIS_URL,
     port: value.PORT,
@@ -55,4 +70,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       .map((origin) => origin.trim())
       .filter(Boolean),
   };
+}
+
+function stripTrailingSlash(url: string): string {
+  return url.replace(/\/+$/, '');
 }

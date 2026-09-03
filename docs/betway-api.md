@@ -175,6 +175,15 @@ GET https://config.betwayafrica.com/cron/sports/NG/en-US
 This is also where the human-readable market name catalogue lives — useful for the parser's
 market-name lookup table.
 
+**Three of the 27 entries are not sports** (verified 2026-09-03). `Codes`, `Swipe Bet` and
+`Betway Stream` are navigation tiles for other parts of Betway's site: they carry a
+`redirectURL`, an empty `defaultMarkets` and `filterMarkets`, and `hasUpcomingEvents: false`.
+This is a *menu* feed, not a sport catalogue.
+
+The discriminator is `sportType` — `"Sport"` on the 24 real ones, `"Promo"` on these three.
+Filter on it. Unfiltered, a picker offers "Codes" as a sport and the event list comes back
+empty for it, which looks like a bug in the event endpoint rather than in the sport list.
+
 ### 4.2 Regions & leagues for a sport (for filtering, optional for MVP)
 
 ```
@@ -219,6 +228,30 @@ Join key path: `event.eventId` ← `market.eventId`, `market.marketId` ← `outc
 mirroring in the frontend cache (a map per entity, not nested objects) — same pattern
 Betway's own client uses internally (`n.events = new Map`, etc., seen in the bundle).
 
+**Verified values for the inline 1X2 market** (soccer, `Take=5`, 2026-09-03) — the fields a
+`Fixture` is built from:
+
+| Field | Value | Note |
+|---|---|---|
+| `market.marketTypeCName` | `"win-draw-win"` | the stable key. Branch on this |
+| `market.displayName` | `"1X2"` | display-ready |
+| `market.name` | `"[Win/Draw/Win]"` | the `marketTypes` query form — **not** a UI string |
+| `market.index` | `1` | agrees with the §6 index table |
+| `outcome.displayName` | `"Real Sociedad (Beckham)"`, `"Draw"`, `"Real Betis (Nathan)"` | the **team**, never `"Home"`/`"Away"` |
+| `outcome.index` | `2`, `3`, `4` | home, draw, away — starts at 2, not 0 or 1 |
+| `outcome.sbv` | `""` | empty on 1X2; carries the line on Totals |
+
+Consistent across all 5 events: exactly 3 outcomes, indices always `[2,3,4]`, middle one always
+`"Draw"`. Two consequences worth stating plainly:
+
+- **Home/away is positional, and the outcome never says so itself.** `event.homeTeam` /
+  `event.awayTeam` carry the same pair separately, so the information is available twice.
+- **Sort by `outcome.index`.** The array happens to arrive ordered, but nothing upstream
+  promises it, and a picker that renders 1/X/2 by array position is trusting an accident.
+
+Note `outcome.index` is **not** the numeric suffix of the `outcomeId`, and neither of them is a
+position. See §6.
+
 ### 4.4 Full market list for one event (when the user taps into a match)
 
 Two calls, confirmed live:
@@ -247,9 +280,30 @@ prices, boostedPrices }` — same flat/joined shape as §4.3, scoped to one even
 group. `marketGroupId` cycles through the ids from `group-names` (`Main`, `Goals`, `Totals`,
 `Winner`, `Handicap`). `searchQuery` filters markets by name server-side.
 
-**For the MVP picker this whole step (4.4) is skippable** — `BetBook/Upcoming` already returns
-the 1X2 market and its 3 outcomes inline per event, which is all the Create screen needs. Use
-4.4 only if the picker grows beyond a single market.
+`BetBook/Upcoming` already returns the 1X2 market and its 3 outcomes inline per event, so a
+picker scoped to 1X2 never needs 4.4. `GET /api/events/:eventId/markets` uses it for the full
+list, requesting **only `marketGroupId=Main`** — one call, and it already contains 1X2, Double
+Chance, Draw No Bet, Total and Handicap. The other groups cost one call each.
+
+**Squashed markets break the §4.3 join rule** (verified 2026-09-03 on event `74263200`). A
+market with a line arrives as *two* entries:
+
+| | `isSquashedParent` | `isSquashedMarket` | `displayName` | outcomes filed under it |
+|---|---|---|---|---|
+| parent | `true` | `false` | `"Total Goals"` — no line | none |
+| child | `false` | `true` | `"Total (6.5)"` — qualified | none, by `marketId` |
+
+The outcomes carry `marketId` pointing at the **parent** and `originalMarketId` pointing at the
+**child** — and it is the child's id that prefixes their `outcomeId`
+(`"7426320018total=6.5~12"`). So joining on `outcome.marketId`, which is what §4.3 says, files
+Over/Under under the parent whose name has lost the line, and leaves the correctly-named child
+empty. On the `Main` group that turns 5 real markets into 7, two of them empty.
+
+**Join on `outcome.originalMarketId ?? outcome.marketId`, then drop `isSquashedParent`.** On
+`BetBook/Upcoming` the two fields are equal, so this one rule is correct for both feeds.
+
+`outcome.sbv` carries the line separately (`" (6.5)"`, `" (0 : 1.5)"`) for a client that needs
+the outcome to stand alone — the same field §2 mentions for slips.
 
 ---
 
@@ -282,8 +336,8 @@ state's "popular codes" list and for offline fixtures/mocks.
 
 ```
 eventId    73258874
-marketId   732588741            = eventId + marketType index
-outcomeId  7325887411           = marketId + outcome index
+marketId   732588741            = eventId  + market type code
+outcomeId  7325887411           = marketId + outcome type code
 ```
 
 With a market parameter (Totals/Handicap), the value is embedded as text:
@@ -293,15 +347,53 @@ marketId   "7378605620total=0.5~"
 outcomeId  "7378605620total=0.5~12"
 ```
 
-Observed market type indices: `1` = 1X2, `10` = Double Chance, `11` = Draw No Bet,
-`18`/`20` = Total, `29` = Anytime Goalscorer. Non-soccer sports use a different, larger
-index space (tennis Match Winner market seen as `74150364186`, i.e. a 3-digit type code) —
-**don't hardcode the soccer index table for other sports**, read `marketTypeCName` instead
+Observed market type codes: `1` = 1X2, `10` = Double Chance, `11` = Draw No Bet, `16` =
+Handicap 2-Way, `18`/`20` = Total, `29` = Anytime Goalscorer. Non-soccer sports use a
+different, larger space (tennis Match Winner market seen as `74150364186`, i.e. a 3-digit type
+code) — **don't hardcode the soccer table for other sports**, read `marketTypeCName` instead
 of parsing the numeric suffix.
 
-Practical consequence: outcome IDs are constructed from event+market+outcome index, not
-random. That's the seam for a future cross-bookmaker mapping layer — same shape, just a
-different id-construction function per provider.
+### Three ways to misread these ids
+
+All verified on event `74263200`, 2026-09-03. Each is easy to get wrong and none of them fails
+loudly.
+
+**1. The suffix is a type code, not a position.** It says *which kind* of outcome this is, not
+where it sits in the market, and it does not restart at 1 per market:
+
+| Market | `marketId` | outcome suffixes |
+|---|---|---|
+| 1X2 | `742632001` | `1`, `2`, `3` |
+| Double Chance | `7426320010` | `9`, `10`, `11` |
+| Draw No Bet | `7426320011` | `4`, `5` |
+| Handicap (0 : 1.5) | `7426320016hcp=-1.5~` | `1714`, `1715` |
+
+1X2 looks positional purely by coincidence. To order outcomes, sort by the `index` *field*
+(§4.3); to identify one, read its `displayName`.
+
+**2. The `index` field is a different number from the suffix.** Objects carry a literal
+`index` — `market.index` is `1` for 1X2 but `3` for Double Chance, Draw No Bet *and* Total,
+so it is not a type code; `outcome.index` is `2, 3, 4` on 1X2 whose suffixes are `1, 2, 3`.
+The two spaces are unrelated and neither derives from the other. "Index" in this section means
+the id suffix and nothing else.
+
+**3. Market ids and outcome ids share one namespace, and they collide.** On event `74263200`,
+`7426320011` is *both* the Draw No Bet `marketId` and the 1X2 home `outcomeId`:
+
+```
+742632001    1X2 market          →  outcome 7426320011  (home)
+7426320011   Draw No Bet market  →  outcome 74263200114 (home)
+```
+
+So a single `Map` keyed by id across both entity types silently overwrites one with the other,
+and `outcomeId.startsWith(marketId)` matches the wrong market — `742632001` is also a prefix
+of `7426320010`. Key a map per entity type and join on the explicit fields (§4.3), never on
+string prefixes.
+
+Practical consequence: ids are constructed rather than random, which is the seam for a future
+cross-bookmaker mapping layer — same shape, a different id-construction function per provider.
+Constructing one yourself, though, means reproducing the type-code tables above, and those are
+per sport. Read the ids Betway sends; do not build them.
 
 ---
 

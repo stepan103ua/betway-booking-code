@@ -1,4 +1,4 @@
-import type { Fixture, PopularBookingCode, Slip, Sport } from '@booking-code/contracts';
+import type { Fixture, Market, PopularBookingCode, Slip, Sport } from '@booking-code/contracts';
 
 /**
  * The one seam in the system.
@@ -32,6 +32,13 @@ export interface BookingCodeProvider {
 
   /** Upcoming fixtures for a sport, with the 1X2 market inline. */
   upcomingEvents(sportId: string, take: number): Promise<Fixture[]>;
+
+  /**
+   * Every market for one event, not just 1X2. Empty when the event is unknown — upstream
+   * answers 200 with empty arrays rather than 404ing, so "no such event" and "no markets"
+   * are the same answer here and the service decides what that means.
+   */
+  eventMarkets(eventId: string): Promise<Market[]>;
 
   /**
    * ISO timestamp of the last successful upstream call, or null if none yet.

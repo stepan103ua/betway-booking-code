@@ -25,7 +25,11 @@ function main(): void {
   const cache = createCache(config.redisUrl);
 
   // Offline demo or no network: swap for `new FixturesProvider()`.
-  const provider: BookingCodeProvider = new BetwayProvider(config.betwayBaseUrl);
+  const provider: BookingCodeProvider = new BetwayProvider({
+    base: config.betwayBaseUrl,
+    config: config.betwayConfigUrl,
+    feeds: config.betwayFeedsUrl,
+  });
 
   const app = createApp({ provider, cache, allowedOrigins: config.allowedOrigins });
 
