@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The whole app is an HTTP client for `apps/api`. `flutter create` only
+         puts INTERNET in the debug/profile manifests (for hot reload), so a
+         release APK built without this line installs and then fails every
+         request. It has to live in the main manifest to reach the release
+         build. Cleartext stays off here on purpose: the release base URL is
+         HTTPS, and only the debug manifest opts into `http://` for a local API. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="booking_code"
         android:name="${applicationName}"

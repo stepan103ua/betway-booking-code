@@ -43,8 +43,25 @@ class _ConvertResultViewState extends State<ConvertResultView> {
     });
   }
 
-  Future<void> _openBetway() =>
-      launchUrl(Uri.parse(_betwayUrl), mode: LaunchMode.externalApplication);
+  Future<void> _openBetway() async {
+    // `launchUrl` throws when nothing can handle the URI; surface a line
+    // instead of an unhandled error.
+    try {
+      final ok = await launchUrl(
+        Uri.parse(_betwayUrl),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!ok && mounted) _toast();
+    } on Exception {
+      if (mounted) _toast();
+    }
+  }
+
+  void _toast() {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text("Couldn't open Betway.")));
+  }
 
   @override
   Widget build(BuildContext context) {

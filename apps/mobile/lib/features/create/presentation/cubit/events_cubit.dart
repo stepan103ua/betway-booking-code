@@ -25,6 +25,7 @@ class EventsCubit extends Cubit<EventsState> {
         limit: _pageLimit,
         skip: 0,
       );
+      if (isClosed) return; // Create tab left mid-request
       emit(
         EventsState.loaded(
           events: page.events,
@@ -33,6 +34,7 @@ class EventsCubit extends Cubit<EventsState> {
         ),
       );
     } on Failure catch (f) {
+      if (isClosed) return;
       emit(EventsState.error(f));
     }
   }
@@ -44,13 +46,14 @@ class EventsCubit extends Cubit<EventsState> {
       return;
     }
 
-    emit(s.copyWith(loadingMore: true));
+    emit(s.copyWith(loadingMore: true, loadMoreError: null));
     try {
       final page = await _repository.events(
         sport: sportId,
         limit: _pageLimit,
         skip: s.nextSkip,
       );
+      if (isClosed) return; // Create tab left mid-request
       emit(
         EventsState.loaded(
           events: [...s.events, ...page.events],
@@ -58,10 +61,11 @@ class EventsCubit extends Cubit<EventsState> {
           nextSkip: page.skip + page.limit,
         ),
       );
-    } on Failure {
-      // Keep the list that is already on screen; just stop the spinner. The
-      // "load more" control reappears for another try.
-      emit(s.copyWith(loadingMore: false));
+    } on Failure catch (f) {
+      if (isClosed) return;
+      // Keep the list already on screen; stop the spinner and say why nothing
+      // new appeared, so the control isn't a dead end on a flaky connection.
+      emit(s.copyWith(loadingMore: false, loadMoreError: f));
     }
   }
 }

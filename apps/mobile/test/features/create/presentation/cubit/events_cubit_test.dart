@@ -14,14 +14,21 @@ class _FakeCreateRepository implements CreateRepository {
   int _call = 0;
   Object? error;
 
+  /// When set, `events()` throws [error] on this 0-based call and succeeds
+  /// otherwise — lets a test fail only the load-more fetch.
+  int? errorOnCall;
+
   @override
   Future<EventsPage> events({
     required String sport,
     int limit = 20,
     int skip = 0,
   }) async {
-    if (error != null) throw error!;
-    return _pages[_call++];
+    final call = _call++;
+    if (error != null && (errorOnCall == null || errorOnCall == call)) {
+      throw error!;
+    }
+    return _pages[call];
   }
 
   @override
@@ -101,6 +108,35 @@ void main() {
     expect: () => [
       const EventsState.loading(),
       const EventsState.error(NetworkFailure()),
+    ],
+  );
+
+  blocTest<EventsCubit, EventsState>(
+    'a failed loadMore keeps the list and surfaces loadMoreError',
+    build: () => EventsCubit(
+      _FakeCreateRepository([
+          _page(['1', '2'], skip: 0, hasMore: true),
+        ])
+        ..error = const NetworkFailure()
+        ..errorOnCall = 1,
+    ),
+    act: (cubit) async {
+      await cubit.load('soccer');
+      await cubit.loadMore();
+    },
+    expect: () => [
+      const EventsState.loading(),
+      isA<EventsLoaded>().having((s) => s.events.length, 'events', 2),
+      isA<EventsLoaded>().having((s) => s.loadingMore, 'loadingMore', true),
+      isA<EventsLoaded>()
+          .having((s) => s.events.length, 'events kept', 2)
+          .having((s) => s.loadingMore, 'loadingMore', false)
+          .having(
+            (s) => s.loadMoreError,
+            'loadMoreError',
+            isA<NetworkFailure>(),
+          )
+          .having((s) => s.hasMore, 'hasMore', true),
     ],
   );
 }

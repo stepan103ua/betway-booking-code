@@ -15,8 +15,12 @@ class ConvertCubit extends Cubit<ConvertState> {
   Future<void> resolve(String code) async {
     emit(const ConvertState.resolving());
     try {
-      emit(ConvertState.ready(original: await _repository.resolve(code)));
+      final original = await _repository.resolve(code);
+      // The Convert tab can be left (closing this Cubit) mid-request.
+      if (isClosed) return;
+      emit(ConvertState.ready(original: original));
     } on Failure catch (f) {
+      if (isClosed) return;
       // Back to the input with the failure attached — the same shape Decode
       // uses. Nothing is loaded yet, so there is no context to preserve.
       emit(ConvertState.initial(codeError: f));
@@ -43,11 +47,13 @@ class ConvertCubit extends Cubit<ConvertState> {
         s.original.bookingCode,
         s.dropOutcomeIds.toList(growable: false),
       );
+      if (isClosed) return; // Convert tab left mid-request
       final now = state;
       if (now is ConvertReady) {
         emit(now.copyWith(converting: false, result: result));
       }
     } on Failure catch (f) {
+      if (isClosed) return;
       final now = state;
       if (now is ConvertReady) {
         emit(now.copyWith(converting: false, convertError: f));

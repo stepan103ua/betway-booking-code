@@ -15,10 +15,15 @@ class EventMarketsCubit extends Cubit<EventMarketsState> {
   Future<void> load(String eventId) async {
     emit(const EventMarketsState.loading());
     try {
-      emit(EventMarketsState.loaded(await _repository.eventMarkets(eventId)));
+      final markets = await _repository.eventMarkets(eventId);
+      // The sheet (and this Cubit with it) can be dismissed mid-request.
+      if (isClosed) return;
+      emit(EventMarketsState.loaded(markets));
     } on NotFoundFailure {
+      if (isClosed) return;
       emit(const EventMarketsState.empty());
     } on Failure catch (f) {
+      if (isClosed) return;
       emit(EventMarketsState.error(f));
     }
   }

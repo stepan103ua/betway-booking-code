@@ -29,10 +29,9 @@ import '../cubit/slip_cubit.dart';
 import '../cubit/slip_state.dart';
 
 /// Betway's own site — `docs/betway-api.md`'s pinned host. Where "Load in
-/// Betway" opens: no deep-link format for a specific code was ever
-/// supplied (the design system's own "Known gaps" note says the same about
-/// `CodeResult.betwayUrl`), so this takes the user to the site rather than
-/// guessing at a URL scheme nothing has verified.
+/// Betway" opens: no deep-link format for a specific code was ever supplied or
+/// verified, so this takes the user to the site rather than guessing at a URL
+/// scheme.
 const _betwayUrl = 'https://www.betway.com.ng';
 
 /// Decode: paste a code, see what's inside. Ported from
@@ -89,8 +88,10 @@ class _DecodeViewState extends State<_DecodeView> {
     setState(() => _controller.text = text.toUpperCase());
   }
 
-  Future<void> _copy(String code) async {
-    await Clipboard.setData(ClipboardData(text: code));
+  Future<void> _copy(String code) => _copyText(code);
+
+  Future<void> _copyText(String text) async {
+    await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
     setState(() => _copied = true);
     Future.delayed(const Duration(milliseconds: 1600), () {
@@ -98,10 +99,34 @@ class _DecodeViewState extends State<_DecodeView> {
     });
   }
 
-  Future<void> _openBetway() =>
-      launchUrl(Uri.parse(_betwayUrl), mode: LaunchMode.externalApplication);
+  Future<void> _openBetway() => _launch(Uri.parse(_betwayUrl));
+
+  /// Best-effort external open. `launchUrl` throws when nothing can handle the
+  /// URI (no browser, target app absent); swallow it and show a line rather
+  /// than letting it surface as an unhandled error.
+  Future<void> _launch(Uri uri) async {
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok && mounted) _toast("Couldn't open that link.");
+    } on Exception {
+      if (mounted) _toast("Couldn't open that link.");
+    }
+  }
+
+  void _toast(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// The text the share buttons send and "Copy code and odds" copies — one
+  /// string so all three routes carry the same thing.
+  String _shareText(String code, double odds) =>
+      'Betway booking code $code — total odds ${odds.toStringAsFixed(2)}. '
+      'Decode it before you stake: $_betwayUrl';
 
   void _openShareSheet(BuildContext context, String code, double odds) {
+    final text = _shareText(code, odds);
     showAppBottomSheet(
       context: context,
       title: 'Share this code',
@@ -111,18 +136,27 @@ class _DecodeViewState extends State<_DecodeView> {
         children: [
           _ShareCodeRow(code: code, odds: odds),
           const SizedBox(height: 10),
-          const AppButton(
+          AppButton(
             label: 'WhatsApp',
             variant: AppButtonVariant.secondary,
             icon: 'message-circle',
             fullWidth: true,
+            onPressed: () => _launch(
+              Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}'),
+            ),
           ),
           const SizedBox(height: 10),
-          const AppButton(
+          AppButton(
             label: 'Telegram',
             variant: AppButtonVariant.secondary,
             icon: 'send',
             fullWidth: true,
+            onPressed: () => _launch(
+              Uri.parse(
+                'https://t.me/share/url?url=${Uri.encodeComponent(_betwayUrl)}'
+                '&text=${Uri.encodeComponent(text)}',
+              ),
+            ),
           ),
           const SizedBox(height: 10),
           AppButton(
@@ -130,7 +164,7 @@ class _DecodeViewState extends State<_DecodeView> {
             variant: AppButtonVariant.secondary,
             icon: 'copy',
             fullWidth: true,
-            onPressed: () => _copy(code),
+            onPressed: () => _copyText(text),
           ),
         ],
       ),
