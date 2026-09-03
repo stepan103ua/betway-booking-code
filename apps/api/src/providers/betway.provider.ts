@@ -8,7 +8,7 @@ import {
   parseBetBookUpcoming,
   parseConfigSports,
   parseMarketGroup,
-  toFixtures,
+  toFixturesPage,
   toMarkets,
   toSports,
 } from './betway.catalogue.mapper.js';
@@ -16,7 +16,7 @@ import {
   parseBookABet,
   parseFindBookABet,
   parseWidgetBookingCodes,
-  toCatalogueCodes,
+  toCataloguePage,
   toSlip,
 } from './betway.mapper.js';
 
@@ -108,11 +108,18 @@ export class BetwayProvider implements BookingCodeProvider {
    * The public catalogue (docs/betway-api.md §5). Rows only — enriching each into a full slip
    * is a decode per code, composed in the service.
    */
-  async popularCodes(limit: number): Promise<CatalogueCode[]> {
-    const query = new URLSearchParams({ skip: '0', limit: String(limit), source: 'sportsradar' });
+  async popularCodes(
+    limit: number,
+    skip: number,
+  ): Promise<{ codes: CatalogueCode[]; total: number }> {
+    const query = new URLSearchParams({
+      skip: String(skip),
+      limit: String(limit),
+      source: 'sportsradar',
+    });
 
     const body = await this.getJson(`${this.hosts.apic}/api/v1/Widget/BookingCodes?${query}`);
-    return toCatalogueCodes(parseWidgetBookingCodes(body));
+    return toCataloguePage(parseWidgetBookingCodes(body));
   }
 
   /** Reference list of sports (docs/betway-api.md §4.1). */
@@ -127,12 +134,17 @@ export class BetwayProvider implements BookingCodeProvider {
    * `marketTypes` scopes which markets come back *with* each event; it does not filter which
    * events appear. Asking for one market is what keeps this to a single upstream call.
    */
-  async upcomingEvents(sportId: string, take: number): Promise<Fixture[]> {
+  async upcomingEvents(
+    sportId: string,
+    limit: number,
+    skip: number,
+  ): Promise<{ events: Fixture[]; hasMore: boolean }> {
     const query = new URLSearchParams({
       countryCode: 'NG',
       sportId,
-      Skip: '0',
-      Take: String(take),
+      Skip: String(skip),
+      // Upstream's spelling, not ours: our own param is `limit` across both list endpoints.
+      Take: String(limit),
       cultureCode: 'en-US',
       isEsport: 'false',
       boostedOnly: 'false',
@@ -140,7 +152,7 @@ export class BetwayProvider implements BookingCodeProvider {
     });
 
     const body = await this.getJson(`${this.hosts.feeds}/BetBook/Upcoming/?${query}`);
-    return toFixtures(parseBetBookUpcoming(body));
+    return toFixturesPage(parseBetBookUpcoming(body));
   }
 
   /** Every market for one event (docs/betway-api.md §4.4). */

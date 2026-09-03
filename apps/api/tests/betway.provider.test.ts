@@ -123,12 +123,13 @@ describe('browse request shapes', () => {
       jsonResponse({ events: [], markets: [], outcomes: [], prices: [] }),
     );
 
-    await provider.upcomingEvents('soccer', 20);
+    await provider.upcomingEvents('soccer', 20, 0);
 
     const url = new URL(fetchMock.mock.calls[0]![0] as string);
     expect(url.origin + url.pathname).toBe(`${FEEDS_URL}/BetBook/Upcoming/`);
     expect(url.searchParams.get('sportId')).toBe('soccer');
     expect(url.searchParams.get('Take')).toBe('20');
+    expect(url.searchParams.get('Skip')).toBe('0');
     // Scopes which markets come back with each event; it does not filter which events appear.
     expect(url.searchParams.get('marketTypes')).toBe('[Win/Draw/Win]');
   });

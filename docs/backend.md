@@ -65,15 +65,28 @@ response examples: see `docs/backend-api.md`. Summary:
 | `POST /api/booking-codes/resolve` | Decode a code | `Betting/FindBookABet` | Redis, 30–60s |
 | `POST /api/booking-codes` | Encode a new code | `Betting/BookABet` | none (write) |
 | `POST /api/booking-codes/convert` | Reissue a code, dropping dead legs | resolve + encode, composed server-side | none (write) |
-| `GET /api/booking-codes/popular` | Live codes, enriched into full slips | `Widget/BookingCodes` + one `FindBookABet` per code | Redis, 60s |
+| `GET /api/booking-codes/popular?skip=&limit=` | Live codes, enriched into full slips, paged | `Widget/BookingCodes` + one `FindBookABet` per code | Redis, 60s |
 | `GET /api/sports` | Sport list for Create | `cron/sports/NG/en-US` | Redis, 1h |
-| `GET /api/events?sport=` | Upcoming fixtures + inline 1X2 | `BetBook/Upcoming` | Redis, 30s |
+| `GET /api/events?sport=&skip=&limit=` | Upcoming fixtures + inline 1X2, paged | `BetBook/Upcoming` | Redis, 30s |
 | `GET /api/events/:eventId/markets` | Full market list for one event | `MarketGroupings/MarketGroupNamesAndMarketsForEvent` | Redis, 30s |
 | `GET /api/health` | Redis / upstream status | — | none |
 
 `Slip` / `Fixture` / `ApiError` / `ConvertResult` — full type definitions in
 `docs/backend-api.md` §0, mirrored in Dart on the Flutter side. Not repeated here to avoid the
 two documents drifting out of sync.
+
+---
+
+### A note on intermittent failures
+
+Supertest listens on an ephemeral port per request. On a developer machine with other servers
+churning through that range — the Flutter tooling this repo also plans for, Android Studio,
+Spotify — a request occasionally lands on one of them instead. It surfaces as a status this API
+cannot produce: a `401` from a service with no auth, a `404` on a route that always matches.
+
+Measured here at roughly 1 in 3000 requests, which is about one failure per twenty full runs.
+The tell is the response headers: an `x-powered-by` we never set. It is not a flaky test and not
+a race in the code, so before chasing one, check whether the status is even reachable.
 
 ---
 

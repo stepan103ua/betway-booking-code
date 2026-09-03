@@ -69,7 +69,7 @@ describe('GET /api/sports', () => {
 
 describe('GET /api/events', () => {
   it('returns Fixtures matching the documented contract', async () => {
-    const response = await request(buildApp()).get('/api/events?sport=soccer&take=20');
+    const response = await request(buildApp()).get('/api/events?sport=soccer&limit=20');
 
     expect(response.status).toBe(200);
 
@@ -104,15 +104,15 @@ describe('GET /api/events', () => {
     }
   });
 
-  it('defaults sport and take when the query is omitted', async () => {
+  it('defaults sport and limit when the query is omitted', async () => {
     const response = await request(buildApp()).get('/api/events');
 
     expect(response.status).toBe(200);
     expect((response.body.events as Fixture[]).length).toBeGreaterThan(0);
   });
 
-  it('honours take', async () => {
-    const response = await request(buildApp()).get('/api/events?take=2');
+  it('honours limit', async () => {
+    const response = await request(buildApp()).get('/api/events?limit=2');
 
     expect(response.body.events).toHaveLength(2);
   });
@@ -126,10 +126,33 @@ describe('GET /api/events', () => {
     expect(response.body.events).toEqual([]);
   });
 
+  it('pages through the fixture list', async () => {
+    const first = await request(buildApp()).get('/api/events?limit=2&skip=0');
+    const second = await request(buildApp()).get('/api/events?limit=2&skip=2');
+
+    expect(first.body).toMatchObject({ skip: 0, limit: 2, hasMore: true });
+    expect(second.body).toMatchObject({ skip: 2, limit: 2 });
+
+    const firstIds = (first.body.events as Fixture[]).map((e) => e.eventId);
+    const secondIds = (second.body.events as Fixture[]).map((e) => e.eventId);
+    expect(firstIds.filter((id) => secondIds.includes(id))).toEqual([]);
+  });
+
+  it('reports hasMore false once the list runs out', async () => {
+    // The feed sends no total, only an end-of-list flag — so this is upstream's answer, not a
+    // count comparison.
+    const response = await request(buildApp()).get('/api/events?limit=50&skip=0');
+
+    expect(response.body.hasMore).toBe(false);
+  });
+
   it.each([
-    ['above the cap', 'take=51'],
-    ['below one', 'take=0'],
-    ['not a number', 'take=abc'],
+    ['above the cap', 'limit=51'],
+    ['a negative skip', 'skip=-1'],
+    // `skip` lands in a cache key, so it is bounded like every other key input.
+    ['a skip past the ceiling', 'skip=1001'],
+    ['below one', 'limit=0'],
+    ['not a number', 'limit=abc'],
     ['an empty sport', 'sport='],
     // `sport` lands in a Redis key, so its length is bounded like every other key input.
     ['an over-long sport', `sport=${'x'.repeat(33)}`],
@@ -183,28 +206,30 @@ describe('caching', () => {
     const app = buildApp({ cache });
 
     await request(app).get('/api/sports');
-    await request(app).get('/api/events?sport=soccer&take=20');
+    await request(app).get('/api/events?sport=soccer&limit=20');
     await request(app).get(`/api/events/${EVENT_ID}/markets`);
 
     expect(calls).toEqual([
       { key: 'sports', ttl: 3600 },
-      { key: 'events:soccer:20', ttl: 30 },
+      { key: 'events:soccer:0:20', ttl: 30 },
       { key: `markets:${EVENT_ID}`, ttl: 30 },
     ]);
   });
 
-  it('keys events by sport and take, so one paging request cannot poison another', async () => {
+  it('keys events by sport, skip and limit, so one page cannot be served for another', async () => {
     const { cache, calls } = recordingCache();
     const app = buildApp({ cache });
 
-    await request(app).get('/api/events?sport=soccer&take=20');
-    await request(app).get('/api/events?sport=tennis&take=20');
-    await request(app).get('/api/events?sport=soccer&take=5');
+    await request(app).get('/api/events?sport=soccer&limit=20');
+    await request(app).get('/api/events?sport=tennis&limit=20');
+    await request(app).get('/api/events?sport=soccer&limit=5');
+    await request(app).get('/api/events?sport=soccer&limit=20&skip=20');
 
     expect(calls.map((call) => call.key)).toEqual([
-      'events:soccer:20',
-      'events:tennis:20',
-      'events:soccer:5',
+      'events:soccer:0:20',
+      'events:tennis:0:20',
+      'events:soccer:0:5',
+      'events:soccer:20:20',
     ]);
   });
 

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { skipField } from './paging.js';
+
 /**
  * Request schemas for the three core operations.
  *
@@ -85,6 +87,7 @@ export const popularQuerySchema = z.object({
     .min(1, 'Ask for at least one code.')
     .max(20, 'You can ask for at most 20 codes at a time.')
     .default(6),
+  skip: skipField,
 });
 
 export type PopularQuery = z.infer<typeof popularQuerySchema>;

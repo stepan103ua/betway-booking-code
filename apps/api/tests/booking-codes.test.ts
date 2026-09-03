@@ -551,41 +551,102 @@ describe('GET /api/booking-codes/popular', () => {
     expect(response.body.error).toBe('invalid_request');
   });
 
-  it('still returns a full list when some codes fail to decode', async () => {
-    // Roughly one catalogue code in eight is expired or withdrawn. Over-fetching is what keeps
-    // a request for 3 from quietly returning 2.
+  it('returns a short page rather than back-filling when a code has expired', async () => {
+    // Roughly one catalogue code in eight is expired. Topping the page back up would mean
+    // consuming rows the next `skip` then re-reads or jumps past, so the page comes back short
+    // and `total`/`hasMore` carry the truth instead.
     const provider = new FixturesProvider();
     const real = provider.resolve.bind(provider);
     let calls = 0;
     vi.spyOn(provider, 'resolve').mockImplementation(async (code: string) => {
       calls += 1;
-      if (calls % 3 === 0) throw AppError.invalidCode();
+      if (calls === 2) throw AppError.invalidCode();
       return real(code);
     });
 
     const response = await popular('?limit=3', buildApp({ provider }));
 
     expect(response.status).toBe(200);
-    expect(response.body.codes).toHaveLength(3);
+    expect(response.body.codes).toHaveLength(2);
+    // Still page one of three, and still more to come — the short page says nothing about that.
+    expect(response.body).toMatchObject({ skip: 0, limit: 3, hasMore: true });
   });
 
-  it('reports an outage rather than an empty list when every code fails', async () => {
-    // `200 []` here renders as "no popular codes", which is a plausible-looking lie.
+  it('lets an expired page be empty without calling it an outage', async () => {
     const provider = new FixturesProvider();
     vi.spyOn(provider, 'resolve').mockRejectedValue(AppError.invalidCode());
 
     const response = await popular('?limit=3', buildApp({ provider }));
 
-    expect(response.status).toBe(502);
-    expect(response.body.error).toBe('upstream_error');
+    expect(response.status).toBe(200);
+    expect(response.body.codes).toEqual([]);
+    expect(response.body.hasMore).toBe(true);
   });
 
-  it('caches the list, and the decodes it did on the way', async () => {
+  it('does not dress an outage up as a thin page', async () => {
+    // A timeout is a fact about Betway, not about any one code. Swallowing it the way an
+    // expired code is swallowed would report a real outage as an empty list.
+    const provider = new FixturesProvider();
+    vi.spyOn(provider, 'resolve').mockRejectedValue(
+      new AppError('upstream_timeout', 'Betway did not respond in time.'),
+    );
+
+    const response = await popular('?limit=3', buildApp({ provider }));
+
+    expect(response.status).toBe(504);
+    expect(response.body.error).toBe('upstream_timeout');
+  });
+
+  it('pages through the catalogue', async () => {
+    const first = await popular('?limit=2&skip=0');
+    const second = await popular('?limit=2&skip=2');
+
+    expect(first.body).toMatchObject({ skip: 0, limit: 2, hasMore: true });
+    expect(second.body).toMatchObject({ skip: 2, limit: 2 });
+
+    // Asserted before indexing below, so a short page reports itself rather than surfacing as a
+    // TypeError on `.at(-1)` that says nothing about what actually went wrong.
+    expect(first.body.codes).toHaveLength(2);
+    expect(second.body.codes).toHaveLength(2);
+
+    // Distinct codes, and the usage ordering continues across the boundary rather than restarting.
+    const firstCodes = first.body.codes.map((c: Slip) => c.bookingCode);
+    const secondCodes = second.body.codes.map((c: Slip) => c.bookingCode);
+    expect(firstCodes.filter((c: string) => secondCodes.includes(c))).toEqual([]);
+    expect(first.body.codes.at(-1)!.usageCount!).toBeGreaterThanOrEqual(
+      second.body.codes[0]!.usageCount!,
+    );
+  });
+
+  it('reports hasMore false on the last page', async () => {
+    const { total } = (await popular('?limit=1')).body;
+    const last = await popular(`?limit=5&skip=${total - 5}`);
+
+    expect(last.body.hasMore).toBe(false);
+  });
+
+  it.each([
+    ['negative', '?skip=-1'],
+    // Bounded because it lands in a cache key: an unbounded offset is unbounded key
+    // cardinality, one fresh entry and one upstream call per distinct value.
+    ['past the ceiling', '?skip=1001'],
+  ])('rejects a skip that is %s', async (_name, query) => {
+    const response = await popular(query);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('invalid_request');
+  });
+
+  it('caches each page separately, and the decodes it did on the way', async () => {
     const { cache, calls } = recordingCache();
+    const app = buildApp({ cache });
 
-    await popular('?limit=2', buildApp({ cache }));
+    await popular('?limit=2&skip=0', app);
+    await popular('?limit=2&skip=2', app);
 
-    expect(calls[0]).toEqual({ key: 'popular:2', ttl: 60 });
+    // `skip` is in the key: without it page two would be served page one's cached body.
+    expect(calls[0]).toEqual({ key: 'popular:0:2', ttl: 60 });
+    expect(calls.some((call) => call.key === 'popular:2:2')).toBe(true);
     // The fan-out goes through `this.resolve`, so each code is cached for /resolve too — a code
     // in this list is already warm by the time a user clicks it.
     expect(calls.filter((call) => call.key.startsWith('resolve:')).length).toBeGreaterThan(0);

@@ -89,6 +89,35 @@ export type MarketOutcome = {
   odds: number;
 };
 
+/**
+ * A page of a list endpoint.
+ *
+ * `hasMore` rather than a total, because the two upstreams report their extent differently:
+ * the code catalogue sends a count, the event feed sends only an `isFinalPage` flag. Both can
+ * answer "is there another page", which is the question a "load more" button actually asks —
+ * so that is what crosses the boundary, and neither upstream's shape leaks through.
+ */
+export type PageInfo = {
+  /** Offset of the first item, echoed from the request. */
+  skip: number;
+  /** Whether asking again at `skip + <page size>` would return anything. */
+  hasMore: boolean;
+};
+
+/** `GET /api/events` — one page of fixtures. */
+export type EventsPage = PageInfo & {
+  events: Fixture[];
+  limit: number;
+};
+
+/** `GET /api/booking-codes/popular` — one page of enriched slips. */
+export type PopularPage = PageInfo & {
+  codes: Slip[];
+  limit: number;
+  /** How many codes the catalogue holds in total. Available here; the event feed has no equivalent. */
+  total: number;
+};
+
 /** The full market list for one event. */
 export type EventMarkets = {
   eventId: string;

@@ -41,7 +41,7 @@ export class BookingCodesController {
   };
 
   popular = async (_req: Request, res: Response): Promise<void> => {
-    const { limit } = validatedQuery<PopularQuery>(res);
-    res.json({ codes: await this.service.popular(limit) });
+    const { limit, skip } = validatedQuery<PopularQuery>(res);
+    res.json(await this.service.popular(limit, skip));
   };
 }

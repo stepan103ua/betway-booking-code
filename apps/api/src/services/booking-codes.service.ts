@@ -1,4 +1,4 @@
-import type { ConvertResult, Slip } from '@booking-code/contracts';
+import type { ConvertResult, PopularPage, Slip } from '@booking-code/contracts';
 
 import { mapLimited } from '../lib/concurrency.js';
 import { AppError, isAppError } from '../lib/errors.js';
@@ -48,18 +48,6 @@ const POPULAR_TTL_SECONDS = 60;
 
 /** Decodes in flight while enriching the catalogue. Enough to be quick, few enough to be polite. */
 const POPULAR_CONCURRENCY = 4;
-
-/**
- * Extra catalogue rows fetched beyond what was asked for.
- *
- * Roughly one code in eight fails to decode — measured, not guessed: of 8 sampled, 7 resolved
- * and one returned `BookABetInvalidCode`. Without slack a request for 6 usually returns 5, and
- * the client has no way to ask for "6 that actually work".
- */
-const POPULAR_OVERFETCH = 4;
-
-/** Upstream's own ceiling for one page of the catalogue. */
-const POPULAR_MAX_ROWS = 20;
 
 export class BookingCodesService {
   constructor(
@@ -265,38 +253,49 @@ export class BookingCodesService {
    *
    * Order is upstream's: the catalogue arrives sorted by usage, descending, so dropping the
    * codes that fail preserves it and nothing here sorts.
+   *
+   * **Pages can come back short.** Roughly one catalogue code in eight is expired, and once
+   * `skip` is a client-visible offset there is no way to quietly over-fetch and top a page up —
+   * doing so consumes rows that the next `skip` would then re-read or jump past. `total` and
+   * `hasMore` are the honest signals instead, both derived from catalogue offsets rather than
+   * from how many codes survived.
    */
-  async popular(limit: number): Promise<Slip[]> {
-    return this.cache.cached(`popular:${limit}`, POPULAR_TTL_SECONDS, async () => {
-      const rows = await this.provider.popularCodes(
-        Math.min(limit + POPULAR_OVERFETCH, POPULAR_MAX_ROWS),
+  async popular(limit: number, skip: number): Promise<PopularPage> {
+    return this.cache.cached(`popular:${skip}:${limit}`, POPULAR_TTL_SECONDS, async () => {
+      const { codes: rows, total } = await this.provider.popularCodes(limit, skip);
+
+      const enriched = await mapLimited(
+        rows,
+        POPULAR_CONCURRENCY,
+        async (row): Promise<Slip | null> => {
+          try {
+            return {
+              ...(await this.resolve(row.bookingCode)),
+              // The catalogue's two fields win: the decode always reports them as null.
+              expiresAt: row.expiresAt,
+              usageCount: row.usageCount,
+            };
+          } catch (error) {
+            // An expired or withdrawn code is an ordinary state of this list, so it is dropped
+            // and the page comes back short. Anything else — a timeout, a 502 — is a fact about
+            // Betway rather than about this code, and swallowing it would dress an outage up as
+            // a thin page. The same distinction `resolve` draws for its negative cache.
+            if (isAppError(error) && error.code === 'invalid_code') return null;
+            throw error;
+          }
+        },
       );
 
-      const enriched = await mapLimited(rows, POPULAR_CONCURRENCY, async (row): Promise<Slip | null> => {
-        try {
-          return {
-            ...(await this.resolve(row.bookingCode)),
-            // The catalogue's two fields win: the decode always reports them as null.
-            expiresAt: row.expiresAt,
-            usageCount: row.usageCount,
-          };
-        } catch {
-          // An expired or withdrawn code is an ordinary state of this list, not an incident.
-          // Logging each at warn would bury the real failures under routine noise.
-          return null;
-        }
-      });
-
-      const codes = enriched.filter((slip): slip is Slip => slip !== null).slice(0, limit);
-
-      // Every code failing while the catalogue itself answered means Betway is refusing decodes.
-      // Returning `200 []` there renders as "no popular codes" — a plausible-looking empty state
-      // that hides an outage — so it is reported as what it is.
-      if (codes.length === 0 && rows.length > 0) {
-        throw AppError.upstream('Could not read any of the popular codes.');
-      }
-
-      return codes;
+      return {
+        codes: enriched.filter((slip): slip is Slip => slip !== null),
+        skip,
+        limit,
+        total,
+        // Driven by catalogue offsets, not by how many survived: a page that lost two codes to
+        // expiry is still followed by another, and deriving this from `codes.length` would stop
+        // paging early.
+        hasMore: skip + limit < total,
+      };
     });
   }
 }

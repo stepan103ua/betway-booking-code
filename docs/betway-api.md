@@ -379,6 +379,9 @@ Four things verified on a live sample (2026-09-03), all of which shape what can 
   (§2), so this endpoint is the only source of a slip's expiry and use count.
 - **Already sorted by `count`, descending** — over 20 sampled entries, strictly. Popularity
   ordering is free; nothing needs to re-sort.
+- **`skip` pages cleanly and `total` bounds it.** `skip=3&limit=3` continues exactly where
+  `skip=0&limit=3` stopped, with no overlap, and `skip=118&limit=10` returns 2 rather than
+  padding. Ordering is stable across pages, so paging does not reshuffle.
 - **"always-valid" is not quite true: about one code in eight fails to decode.** Of 8 sampled,
   7 returned slips whose leg counts matched `bets.length` exactly and one returned
   `BookABetInvalidCode`. Anything enriching this list has to expect that and carry slack.
