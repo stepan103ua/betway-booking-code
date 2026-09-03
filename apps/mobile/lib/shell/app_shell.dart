@@ -28,6 +28,11 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   String _mode = 'decode';
 
+  /// Carried from Decode's "Rebuild" button so Convert opens on that code.
+  /// Cleared when the user switches tabs by hand — a manual tap on Convert
+  /// starts from a blank input, not whatever Decode last looked at.
+  String? _convertCode;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -44,7 +49,10 @@ class _AppShellState extends State<AppShell> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
               child: AppTabs(
                 value: _mode,
-                onChanged: (v) => setState(() => _mode = v),
+                onChanged: (v) => setState(() {
+                  _convertCode = null;
+                  _mode = v;
+                }),
                 items: const [
                   AppTabItem(
                     value: 'decode',
@@ -67,9 +75,15 @@ class _AppShellState extends State<AppShell> {
                 ),
                 child: switch (_mode) {
                   'create' => const CreateScreen(),
-                  'convert' => const ConvertScreen(),
+                  'convert' => ConvertScreen(
+                    key: ValueKey(_convertCode),
+                    initialCode: _convertCode,
+                  ),
                   _ => DecodeScreen(
-                    onConvert: () => setState(() => _mode = 'convert'),
+                    onConvert: (code) => setState(() {
+                      _convertCode = code;
+                      _mode = 'convert';
+                    }),
                   ),
                 },
               ),

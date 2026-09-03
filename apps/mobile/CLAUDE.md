@@ -36,7 +36,7 @@ lib/
   widgets/slip/       the slip anatomy — shared across every feature, same reason models/
                       sits above features/
   models/             Slip, Selection, Fixture (Market, MarketOutcome), EventsPage, Sport,
-                      PopularCodesPage — freezed + json_serializable, mirror
+                      PopularCodesPage, ConvertResult — freezed + json_serializable, mirror
                       docs/backend-api.md §0 field for field
   core/
     network/dio_client.dart   the one Dio instance
@@ -45,22 +45,19 @@ lib/
   features/
     decode/{data,domain,presentation}/   resolve + popular codes
     create/{data,domain,presentation}/   sport → event → markets picker → generate a code
-    convert/                              a placeholder `EmptyState`, no data/domain yet
+    convert/{data,domain,presentation}/  resolve a code → drop legs → reissue it
   shell/app_shell.dart   header + mode tabs
   main.dart
 ```
 
-`features/convert/` is intentionally incomplete: its screen is an `EmptyState` saying plainly
-that it isn't built, not a flow that looks functional and hands back a hardcoded fake code — a
-working-looking screen with no real endpoint behind it is worse than one that says so. Wiring
-it to `apps/api` means giving it the same four-layer skeleton `features/decode/` and
-`features/create/` already have — copy the shape, don't invent a different one, and don't
-reach for demo/fixture data to fill it in the meantime.
-
-`features/create/` follows that skeleton with three cubits rather than one (`CreateCubit`,
-`EventsCubit`, `EventMarketsCubit` — split by concern, still all `Cubit`, see `docs/mobile.md`
-§4) and a `presentation/model/draft_pick.dart` — the one UI-only shape the app has, sanctioned
-by `docs/mobile.md` §3 because a draft leg is not any endpoint's response.
+All three features follow the `features/decode/` skeleton. `features/create/` splits into
+three cubits (`CreateCubit`, `EventsCubit`, `EventMarketsCubit` — by concern, still all
+`Cubit`, see `docs/mobile.md` §4) and has `presentation/model/draft_pick.dart`, the one UI-only
+shape the app carries (sanctioned by `docs/mobile.md` §3 — a draft leg is not any endpoint's
+response). `features/convert/` is one `ConvertCubit` over `resolve` then `convert`, with a
+feature-local `ConvertLegRow` (a keep/drop checklist row — deliberately not `SelectionRow`,
+which only knows the dead/live split). Decode's "Rebuild" button hands its code to the Convert
+tab through `shell/app_shell.dart` (`onConvert` carries the code).
 
 ## Commands
 

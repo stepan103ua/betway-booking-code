@@ -1,11 +1,12 @@
 # Mobile — Betway Nigeria Booking Code Product
 
 `apps/mobile` — feature-first architecture: every screen owns its own Bloc/Cubit,
-repository, and remote data source, in an identical skeleton. Two features are built —
-`decode` (the slip view the brief asks for) and `create` (build a slip from scratch, generate
-a code) — and `create` was added by copying `decode`'s four-layer shape, not by restructuring
-anything. That's the point of feature-first: the shape of the codebase doesn't change when the
-app grows, only the number of `features/*` folders does. `convert` is still a placeholder.
+repository, and remote data source, in an identical skeleton. All three features are built —
+`decode` (the slip view the brief asks for), `create` (build a slip from scratch, generate a
+code) and `convert` (reissue a code without its dead legs) — and `create` and `convert` were
+each added by copying `decode`'s four-layer shape, not by restructuring anything. That's the
+point of feature-first: the shape of the codebase doesn't change when the app grows, only the
+number of `features/*` folders does.
 
 Checked against the official Bloc library architecture docs (bloclibrary.dev) and pub.dev
 package pages, not recalled from memory. Pin the exact Flutter/Dart version with
@@ -65,13 +66,20 @@ lib/
         pages/create_screen.dart
         widgets/                     sport_selector, event_tile, market_picker_sheet,
                                      draft_tray, created_code_view, outcome_chip
-    convert/                         a placeholder EmptyState, no data/domain yet
+    convert/                         same four layers as decode/
+      data/{datasources,repositories}/   resolve, then convert
+      domain/repositories/
+      presentation/
+        cubit/convert_cubit.dart     loaded slip + drop set + convert
+        pages/convert_screen.dart
+        widgets/                     convert_leg_row (keep/drop toggle), convert_result_view
   design/                            ported design-system tokens + core widget kit
   widgets/slip/                      slip anatomy shared across features (SelectionRow, SlipCard, …)
   models/
     slip.dart, selection.dart        mirror packages/contracts §0, shared above features/
     fixture.dart                     Fixture, Market, MarketOutcome — for Create's browse
     events_page.dart, popular_codes_page.dart, sport.dart
+    convert_result.dart              Slip fields + previousBookingCode/previousTotalOdds/droppedCount
   main.dart
 ```
 
@@ -310,19 +318,22 @@ fixture-provider tests (`docs/backend.md` §7): every layer is verifiable in iso
 
 ---
 
-## 9. Adding a second screen
+## 9. Adding the second and third screens
 
 Concretely, what "scalable" bought: Create was `features/create/{data,domain,presentation}/`
-in the same four-layer shape, four new `Failure` subtypes (§5), new DTO models for the browse
+in the same four-layer shape, new `Failure` subtypes (§5), new DTO models for the browse
 endpoints (§2), and one more block in `core/di.dart`. Nothing in `core/`, `models/slip.dart`,
 `widgets/slip/`, or `features/decode/` changed. Create is larger than Decode — a
 three-step picker and a bottom sheet rather than one input — so it grew to three cubits and a
-handful of feature-local widgets, but every one of those sits inside `features/create/` and
-the seams are the same. That's the concrete test of whether "feature-first" was real: the
-second feature cost roughly what the first one's shape promised.
+handful of feature-local widgets, but every one of those sits inside `features/create/`.
 
-`convert` is still the untouched placeholder — the same `EmptyState` treatment, for the same
-reason (a flow that hands back a hardcoded code is worse than one that says it isn't built).
+Convert was cheaper still: one `ConvertCubit`, one data source (`resolve` then `convert`),
+one model (`convert_result.dart`), two feature widgets, `EmptySlipFailure` /
+`ConflictingSelectionsFailure` added to the shared hierarchy. The only edit outside
+`features/convert/` was `shell/app_shell.dart` — Decode's "Rebuild" button now hands the code
+to the Convert tab (`onConvert` went from `VoidCallback` to `void Function(String)`), and a
+one-line `_convertCode` on the shell carries it. That's the concrete test of whether
+"feature-first" was real: each new feature cost roughly what the first one's shape promised.
 
 ---
 
@@ -349,6 +360,16 @@ as `conflicting_selections` (`docs/betway-api.md` §3), and this keeps the user 
 that. `CreateCubit.toggleOutcome` also drops a conflicting add, so a race can't slip one past
 the disabled chips.
 
+Convert's screen is a `switch` over `ConvertState` (enter a code → pick what to drop → the
+after view). The picker reuses `CodeInput` for the code entry and a feature-local
+`ConvertLegRow` for the checklist — that row is *not* `SelectionRow`, because `SelectionRow`'s
+only "struck through" state is `!isActive` and Convert needs a third: a live leg the user
+chose to drop. Dead legs render struck and disabled ("dropped automatically"); the before/
+after odds are `original.totalOdds` versus a **preview** product of the kept legs, clearly
+marked `≈` because the real total is re-priced by `/convert`. The after view is a plain
+`SlipCard` of `ConvertResult` with the diff in its notice slot — no recap caveat needed, since
+`ConvertResult` carries the decoded new slip.
+
 ---
 
 ## 11. Distribution
@@ -365,9 +386,9 @@ through Apple review.
 
 - **Domain `Entity` distinct from `Slip`** — §3. `DraftPick` is a presentation shape, not a
   domain entity with a mapper to and from an identical model.
-- **`Bloc` (event classes) over `Cubit`** — §4. Decode has one trigger; Create has several
-  but stayed on `Cubit` (three of them, split by concern) to keep the app free of `Event`
-  classes. `Bloc` still fits the day one transition fires from several places.
+- **`Bloc` (event classes) over `Cubit`** — §4. Decode has one trigger; Create and Convert
+  have several each but stayed on `Cubit` (Create split into three by concern) to keep the app
+  free of `Event` classes. `Bloc` still fits the day one transition fires from several places.
 - **`Either`/`dartz`/`fpdart`** — §5. Throw/catch expresses the same outcomes; `bloc_test`
   verifies the same states either way, and Create's larger `Failure` hierarchy doesn't
   change that.

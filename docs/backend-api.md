@@ -482,18 +482,20 @@ considered and deliberately left out rather than added to satisfy the checklist.
 
 **Web** (Next.js) uses all of the above.
 
-**Flutter** uses the Decode and Create surfaces:
+**Flutter** uses all three:
 
 - Decode — `POST /api/booking-codes/resolve` and `GET /api/booking-codes/popular`.
 - Create — `GET /api/sports`, `GET /api/events`, `GET /api/events/:eventId/markets` and
   `POST /api/booking-codes`, driving a sport → event → markets picker.
+- Convert — `POST /api/booking-codes/resolve` (to show the slip and its dead legs) then
+  `POST /api/booking-codes/convert`.
 
-Convert stays web-only — on a single bookmaker it is `resolve → filter → encode` with no
-new upstream shape, so it earns its place on the client that already has the other two
-screens, not on the second one. Every DTO is the same JSON on both sides; the Dart models in
-`apps/mobile/lib/models/` mirror the TS types field for field, not a reinterpretation.
+Every DTO is the same JSON on both sides; the Dart models in `apps/mobile/lib/models/` mirror
+the TS types field for field, not a reinterpretation.
 
 `POST /api/booking-codes` returns only `{ bookingCode }`. The client cannot show a verified
 slip for a freshly created code without a second `resolve`, so the Create success screen
 recaps the selections the user picked (with the odds held at pick time) and says plainly
-that live prices may have moved — the same drift the Decode screen already surfaces.
+that live prices may have moved — the same drift the Decode screen already surfaces. Convert
+does not have this problem: `ConvertResult` already carries the decoded new slip plus
+`previousBookingCode` / `previousTotalOdds` for the before/after diff.

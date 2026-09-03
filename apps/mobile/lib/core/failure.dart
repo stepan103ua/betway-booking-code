@@ -47,10 +47,27 @@ class TooManyOutcomesFailure extends Failure {
   const TooManyOutcomesFailure(super.message);
 }
 
-/// `400 outcomes_unavailable` from `POST /api/booking-codes` — one or more
-/// picked selections went off between picking and generating (the soccer feed
-/// is largely eSoccer, kicking off every ~15 min, so a leg can die mid-pick).
-/// Carries the server's own message, which is written to be shown verbatim.
+/// `400 outcomes_unavailable` from `POST /api/booking-codes` and `/convert` —
+/// one or more selections went off between resolving and (re)generating (the
+/// soccer feed is largely eSoccer, kicking off every ~15 min, so a leg can die
+/// mid-flow). Carries the server's own message, which is written to be shown
+/// verbatim.
 class OutcomesUnavailableFailure extends Failure {
   const OutcomesUnavailableFailure(super.message);
+}
+
+/// `400 empty_slip` from `POST /api/booking-codes/convert` — the drops (asked
+/// for, plus every dead leg) leave nothing to reissue. The server's message
+/// tells the two apart ("dropping those leaves nothing" vs "none can still be
+/// bet").
+class EmptySlipFailure extends Failure {
+  const EmptySlipFailure(super.message);
+}
+
+/// `400 conflicting_selections` from `POST /api/booking-codes` and `/convert` —
+/// two or more of the (kept) legs are on the same event, which a booking code
+/// cannot combine (`docs/betway-api.md` §3). The Create picker prevents this;
+/// Convert can hit it on a code that was already conflicting.
+class ConflictingSelectionsFailure extends Failure {
+  const ConflictingSelectionsFailure(super.message);
 }
