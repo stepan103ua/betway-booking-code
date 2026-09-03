@@ -70,9 +70,10 @@ builds from the repo root because this is an npm workspace.
 | `POST /api/booking-codes/resolve` | Decode a code |
 | `POST /api/booking-codes` | Encode a new code |
 | `POST /api/booking-codes/convert` | Reissue a code, dropping dead legs |
-| `GET /api/booking-codes/popular` | Live codes for the Decode empty state |
+| `GET /api/booking-codes/popular` | Live codes for the Decode empty state, as full slips |
 | `GET /api/sports` | Sport list |
 | `GET /api/events?sport=` | Upcoming fixtures with 1X2 inline |
+| `GET /api/events/:eventId/markets` | Every market for one event |
 | `GET /api/health` | Redis and upstream status |
 
 Full request/response contract in [`docs/backend-api.md`](docs/backend-api.md).

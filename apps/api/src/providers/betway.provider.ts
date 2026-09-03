@@ -1,9 +1,9 @@
-import type { Fixture, Market, PopularBookingCode, Slip, Sport } from '@booking-code/contracts';
+import type { Fixture, Market, Slip, Sport } from '@booking-code/contracts';
 
 import { AppError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 
-import type { BookingCodeProvider } from './booking-code-provider.js';
+import type { BookingCodeProvider, CatalogueCode } from './booking-code-provider.js';
 import {
   parseBetBookUpcoming,
   parseConfigSports,
@@ -12,7 +12,13 @@ import {
   toMarkets,
   toSports,
 } from './betway.catalogue.mapper.js';
-import { parseBookABet, parseFindBookABet, toSlip } from './betway.mapper.js';
+import {
+  parseBookABet,
+  parseFindBookABet,
+  parseWidgetBookingCodes,
+  toCatalogueCodes,
+  toSlip,
+} from './betway.mapper.js';
 
 /**
  * The live Betway implementation. Endpoints, payloads and quirks are all documented and
@@ -21,7 +27,6 @@ import { parseBookABet, parseFindBookABet, toSlip } from './betway.mapper.js';
  * Anonymous throughout: no auth, no signature, no captcha, no cookies. Cloudflare guards
  * Betway's HTML, not its API, so a plain server-side `fetch` is sufficient (§8).
  *
- * Still a stub: popular codes.
  */
 
 /**
@@ -49,6 +54,8 @@ export type BetwayHosts = {
   config: string;
   /** Odds feed — event lists and market groups. */
   feeds: string;
+  /** Public widget API — the catalogue of live booking codes. */
+  apic: string;
 };
 
 /**
@@ -97,8 +104,15 @@ export class BetwayProvider implements BookingCodeProvider {
     return parseBookABet(await this.readBody(response));
   }
 
-  async popularCodes(_limit: number): Promise<PopularBookingCode[]> {
-    throw AppError.notImplemented('Betway popular codes');
+  /**
+   * The public catalogue (docs/betway-api.md §5). Rows only — enriching each into a full slip
+   * is a decode per code, composed in the service.
+   */
+  async popularCodes(limit: number): Promise<CatalogueCode[]> {
+    const query = new URLSearchParams({ skip: '0', limit: String(limit), source: 'sportsradar' });
+
+    const body = await this.getJson(`${this.hosts.apic}/api/v1/Widget/BookingCodes?${query}`);
+    return toCatalogueCodes(parseWidgetBookingCodes(body));
   }
 
   /** Reference list of sports (docs/betway-api.md §4.1). */

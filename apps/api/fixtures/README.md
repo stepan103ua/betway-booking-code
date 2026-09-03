@@ -10,6 +10,7 @@ drifts from the real shape and quietly stops testing the parser.
 | `config-sports.json` | The full sport list, all 27 entries — including the three `sportType: "Promo"` ones the mapper filters out |
 | `betbook-upcoming.json` | Five upcoming soccer events with their 1X2 markets inline (`Take=5`) |
 | `market-group-main.json` | The `Main` market group for event `74263200`, one of the five above |
+| `widget-booking-codes.json` | Ten live catalogue entries, sorted by usage — the input to the popular-codes fan-out |
 
 The last three are unedited captures. `config-sports.json` keeps the promo entries on purpose —
 they are what the `sportType` filter exists for, so removing them would delete the test. And
@@ -18,6 +19,12 @@ they are what the `sportType` filter exists for, so removing them would delete t
 
 `betbook-upcoming.json` and `market-group-main.json` describe the same event, so the market a
 client sees in the event list is the same one it sees on the event page.
+
+`widget-booking-codes.json` is kept whole because the ordering is part of what it tests — the
+catalogue arrives sorted by usage and the mapper must not disturb it. Offline, every code in it
+resolves to the sample slip, since `FixturesProvider.resolve` answers an unrecognised code with
+that capture; that is what makes the service's fan-out testable without a network. A test that
+needs a decode to fail spies on `resolve` rather than editing this file.
 
 `find-book-a-bet.json` is a subset of a 19-selection slip, chosen to cover every shape the
 mapper handles: a 1X2 leg whose `outcomeName` is a team name, a team-scoped Total

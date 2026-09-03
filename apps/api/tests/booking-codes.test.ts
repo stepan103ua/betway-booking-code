@@ -500,3 +500,94 @@ describe('POST /api/booking-codes/convert', () => {
     );
   });
 });
+
+describe('GET /api/booking-codes/popular', () => {
+  async function popular(query = '', app = buildApp()) {
+    return request(app).get(`/api/booking-codes/popular${query}`);
+  }
+
+  it('returns full slips, not summaries', async () => {
+    const response = await popular('?limit=3');
+
+    expect(response.status).toBe(200);
+    expect(response.body.codes).toHaveLength(3);
+
+    const slip = response.body.codes[0] as Slip;
+    expect(Object.keys(slip).sort()).toEqual([
+      'bookingCode',
+      'expiresAt',
+      'selections',
+      'totalOdds',
+      'usageCount',
+    ]);
+    expect(slip.selections.length).toBeGreaterThan(0);
+    expect(slip.totalOdds).toBeGreaterThan(1);
+  });
+
+  it('populates expiresAt and usageCount — the only endpoint that can', async () => {
+    // These come from the catalogue; FindBookABet always reports them as null. If enrichment
+    // ever drops them, the whole reason this endpoint joins two upstream shapes is gone.
+    const response = await popular('?limit=2');
+
+    for (const slip of response.body.codes as Slip[]) {
+      expect(slip.expiresAt).not.toBeNull();
+      expect(slip.usageCount).not.toBeNull();
+      expect(slip.usageCount!).toBeGreaterThan(0);
+    }
+  });
+
+  it('defaults to 6 when no limit is given', async () => {
+    expect((await popular()).body.codes).toHaveLength(6);
+  });
+
+  it.each([
+    ['zero', '?limit=0'],
+    ['above the cap', '?limit=21'],
+    ['not a number', '?limit=lots'],
+  ])('rejects a limit that is %s', async (_name, query) => {
+    const response = await popular(query);
+
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe('invalid_request');
+  });
+
+  it('still returns a full list when some codes fail to decode', async () => {
+    // Roughly one catalogue code in eight is expired or withdrawn. Over-fetching is what keeps
+    // a request for 3 from quietly returning 2.
+    const provider = new FixturesProvider();
+    const real = provider.resolve.bind(provider);
+    let calls = 0;
+    vi.spyOn(provider, 'resolve').mockImplementation(async (code: string) => {
+      calls += 1;
+      if (calls % 3 === 0) throw AppError.invalidCode();
+      return real(code);
+    });
+
+    const response = await popular('?limit=3', buildApp({ provider }));
+
+    expect(response.status).toBe(200);
+    expect(response.body.codes).toHaveLength(3);
+  });
+
+  it('reports an outage rather than an empty list when every code fails', async () => {
+    // `200 []` here renders as "no popular codes", which is a plausible-looking lie.
+    const provider = new FixturesProvider();
+    vi.spyOn(provider, 'resolve').mockRejectedValue(AppError.invalidCode());
+
+    const response = await popular('?limit=3', buildApp({ provider }));
+
+    expect(response.status).toBe(502);
+    expect(response.body.error).toBe('upstream_error');
+  });
+
+  it('caches the list, and the decodes it did on the way', async () => {
+    const { cache, calls } = recordingCache();
+
+    await popular('?limit=2', buildApp({ cache }));
+
+    expect(calls[0]).toEqual({ key: 'popular:2', ttl: 60 });
+    // The fan-out goes through `this.resolve`, so each code is cached for /resolve too — a code
+    // in this list is already warm by the time a user clicks it.
+    expect(calls.filter((call) => call.key.startsWith('resolve:')).length).toBeGreaterThan(0);
+  });
+});

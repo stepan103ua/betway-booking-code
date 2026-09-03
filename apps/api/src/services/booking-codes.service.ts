@@ -1,5 +1,6 @@
-import type { ConvertResult, PopularBookingCode, Slip } from '@booking-code/contracts';
+import type { ConvertResult, Slip } from '@booking-code/contracts';
 
+import { mapLimited } from '../lib/concurrency.js';
 import { AppError, isAppError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 import { totalOdds } from '../lib/odds.js';
@@ -10,7 +11,6 @@ import type { BookingCodeProvider } from '../providers/booking-code-provider.js'
  * Business logic: the provider fetches and normalises, the controller only maps HTTP in and
  * out, and cache policy lives here.
  *
- * Still TODO: popular codes.
  */
 
 /**
@@ -38,6 +38,28 @@ const RESOLVE_TTL_SECONDS = 30;
  * for misses is the fix, not dropping the negative cache.
  */
 type CachedResolve = { found: true; slip: Slip } | { found: false };
+
+/**
+ * The doc's number (docs/backend.md §5). Twice `RESOLVE_TTL_SECONDS`, so odds inside a cached
+ * list can be up to a minute old — acceptable on a browse surface, and the alternative is
+ * re-running a fan-out that costs one upstream call per code.
+ */
+const POPULAR_TTL_SECONDS = 60;
+
+/** Decodes in flight while enriching the catalogue. Enough to be quick, few enough to be polite. */
+const POPULAR_CONCURRENCY = 4;
+
+/**
+ * Extra catalogue rows fetched beyond what was asked for.
+ *
+ * Roughly one code in eight fails to decode — measured, not guessed: of 8 sampled, 7 resolved
+ * and one returned `BookABetInvalidCode`. Without slack a request for 6 usually returns 5, and
+ * the client has no way to ask for "6 that actually work".
+ */
+const POPULAR_OVERFETCH = 4;
+
+/** Upstream's own ceiling for one page of the catalogue. */
+const POPULAR_MAX_ROWS = 20;
 
 export class BookingCodesService {
   constructor(
@@ -228,7 +250,53 @@ export class BookingCodesService {
     }
   }
 
-  async popular(_limit: number): Promise<PopularBookingCode[]> {
-    throw AppError.notImplemented('Popular codes');
+  /**
+   * The public catalogue, enriched into full slips.
+   *
+   * Two upstream shapes joined, because neither is enough alone. The catalogue carries
+   * `expiryDateTime` and a usage count but **no odds at all** — so `totalOdds` and the
+   * selections need one decode per code. Going the other way, decoding never reports an expiry
+   * or a use count. This is the only endpoint where a `Slip` comes back with `expiresAt` and
+   * `usageCount` populated, and joining the two is the whole reason it costs what it costs.
+   *
+   * The enrichment goes through `this.resolve`, not the provider directly, so every decode
+   * lands under `resolve:{code}` and is shared with `/resolve` — a code shown in this list is
+   * already cached by the time a user clicks it.
+   *
+   * Order is upstream's: the catalogue arrives sorted by usage, descending, so dropping the
+   * codes that fail preserves it and nothing here sorts.
+   */
+  async popular(limit: number): Promise<Slip[]> {
+    return this.cache.cached(`popular:${limit}`, POPULAR_TTL_SECONDS, async () => {
+      const rows = await this.provider.popularCodes(
+        Math.min(limit + POPULAR_OVERFETCH, POPULAR_MAX_ROWS),
+      );
+
+      const enriched = await mapLimited(rows, POPULAR_CONCURRENCY, async (row): Promise<Slip | null> => {
+        try {
+          return {
+            ...(await this.resolve(row.bookingCode)),
+            // The catalogue's two fields win: the decode always reports them as null.
+            expiresAt: row.expiresAt,
+            usageCount: row.usageCount,
+          };
+        } catch {
+          // An expired or withdrawn code is an ordinary state of this list, not an incident.
+          // Logging each at warn would bury the real failures under routine noise.
+          return null;
+        }
+      });
+
+      const codes = enriched.filter((slip): slip is Slip => slip !== null).slice(0, limit);
+
+      // Every code failing while the catalogue itself answered means Betway is refusing decodes.
+      // Returning `200 []` there renders as "no popular codes" — a plausible-looking empty state
+      // that hides an outage — so it is reported as what it is.
+      if (codes.length === 0 && rows.length > 0) {
+        throw AppError.upstream('Could not read any of the popular codes.');
+      }
+
+      return codes;
+    });
   }
 }

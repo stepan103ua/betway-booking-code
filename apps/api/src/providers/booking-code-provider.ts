@@ -1,4 +1,4 @@
-import type { Fixture, Market, PopularBookingCode, Slip, Sport } from '@booking-code/contracts';
+import type { Fixture, Market, Slip, Sport } from '@booking-code/contracts';
 
 /**
  * The one seam in the system.
@@ -24,8 +24,14 @@ export interface BookingCodeProvider {
   /** Encode a set of outcomes into a new booking code. */
   encode(outcomeIds: string[]): Promise<string>;
 
-  /** The public catalogue of live codes, for the Decode empty state. */
-  popularCodes(limit: number): Promise<PopularBookingCode[]>;
+  /**
+   * The public catalogue of live codes, for the Decode empty state.
+   *
+   * Returns catalogue rows only. Turning one into a full `Slip` needs a decode per code, and
+   * that composition belongs in the service (`docs/backend-api.md` §1) — the same place
+   * Convert lives, and for the same reason.
+   */
+  popularCodes(limit: number): Promise<CatalogueCode[]>;
 
   /** Reference list of sports. Slow-moving. */
   sports(): Promise<Sport[]>;
@@ -46,3 +52,20 @@ export interface BookingCodeProvider {
    */
   lastSuccessAt(): string | null;
 }
+
+/**
+ * One row of the public catalogue.
+ *
+ * Deliberately **not** in `packages/contracts`: no client ever sees this shape. It is an
+ * intermediate the service enriches into a `Slip`, and the contracts package is the
+ * client-facing surface only.
+ *
+ * These two fields are the whole reason the catalogue is worth calling at all — `FindBookABet`
+ * reports neither, so this is the only route to a non-null `Slip.expiresAt` / `usageCount`.
+ */
+export type CatalogueCode = {
+  bookingCode: string;
+  /** ISO 8601. Upstream sends an offset datetime with sub-second precision. */
+  expiresAt: string | null;
+  usageCount: number;
+};

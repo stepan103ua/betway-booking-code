@@ -5,6 +5,8 @@ import type { Selection, Slip } from '@booking-code/contracts';
 import { AppError } from '../lib/errors.js';
 import { totalOdds } from '../lib/odds.js';
 
+import type { CatalogueCode } from './booking-code-provider.js';
+
 /**
  * Betway's response shape → our DTOs. The whole of the upstream vocabulary stops here.
  *
@@ -157,4 +159,57 @@ export function parseBookABet(body: unknown): string {
   }
 
   return result.data.bookingCode;
+}
+
+/**
+ * The public catalogue (docs/betway-api.md §5).
+ *
+ * `bets[]` is parsed but not mapped: it carries bare ids with no names or prices, so it can
+ * confirm the shape and nothing more. The decode is the source of truth for what a code
+ * contains — §2 records a code listed with 8 bets decoding to 7 selections.
+ */
+const catalogueEntrySchema = z.object({
+  bookingCode: z.string(),
+  /** An offset datetime with sub-second precision: `2026-09-04T11:26:42.9704472+02:00`. */
+  expiryDateTime: z.string().nullish(),
+  /** How many times the code has been used. Upstream sorts the list by this, descending. */
+  count: z.number(),
+  bets: z.array(z.object({ outcomeID: z.string() })),
+});
+
+export const widgetBookingCodesSchema = z.object({
+  data: z.array(catalogueEntrySchema),
+});
+
+export function parseWidgetBookingCodes(body: unknown): z.infer<typeof widgetBookingCodesSchema> {
+  const result = widgetBookingCodesSchema.safeParse(body);
+
+  if (!result.success) {
+    throw AppError.upstream(
+      'Betway returned a code list we could not read.',
+      result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('; '),
+    );
+  }
+
+  return result.data;
+}
+
+/** Order is upstream's — already sorted by usage — so it is preserved rather than re-sorted. */
+export function toCatalogueCodes(raw: z.infer<typeof widgetBookingCodesSchema>): CatalogueCode[] {
+  return raw.data.map((entry) => ({
+    bookingCode: entry.bookingCode.trim().toUpperCase(),
+    expiresAt: toIso(entry.expiryDateTime),
+    usageCount: entry.count,
+  }));
+}
+
+/**
+ * Upstream's offset datetime → ISO. Unparseable input becomes `null` rather than an
+ * `Invalid Date` that survives serialisation as the string "Invalid Date".
+ */
+function toIso(value: string | null | undefined): string | null {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }

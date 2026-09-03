@@ -29,6 +29,7 @@ function main(): void {
     base: config.betwayBaseUrl,
     config: config.betwayConfigUrl,
     feeds: config.betwayFeedsUrl,
+    apic: config.betwayApicUrl,
   });
 
   const app = createApp({ provider, cache, allowedOrigins: config.allowedOrigins });

@@ -65,7 +65,7 @@ response examples: see `docs/backend-api.md`. Summary:
 | `POST /api/booking-codes/resolve` | Decode a code | `Betting/FindBookABet` | Redis, 30–60s |
 | `POST /api/booking-codes` | Encode a new code | `Betting/BookABet` | none (write) |
 | `POST /api/booking-codes/convert` | Reissue a code, dropping dead legs | resolve + encode, composed server-side | none (write) |
-| `GET /api/booking-codes/popular` | Live codes for the Decode empty state | `Widget/BookingCodes` | Redis, 60s |
+| `GET /api/booking-codes/popular` | Live codes, enriched into full slips | `Widget/BookingCodes` + one `FindBookABet` per code | Redis, 60s |
 | `GET /api/sports` | Sport list for Create | `cron/sports/NG/en-US` | Redis, 1h |
 | `GET /api/events?sport=` | Upcoming fixtures + inline 1X2 | `BetBook/Upcoming` | Redis, 30s |
 | `GET /api/events/:eventId/markets` | Full market list for one event | `MarketGroupings/MarketGroupNamesAndMarketsForEvent` | Redis, 30s |
@@ -132,7 +132,8 @@ which the API doesn't fit. Avoid Render's free tier for this specifically: it sp
 after inactivity and the resulting 30–50s cold start on the reviewer's first request reads as
 a broken deployment, not a slow one.
 
-Environment variables: `BETWAY_BASE_URL`, `BETWAY_CONFIG_URL`, `BETWAY_FEEDS_URL`, `REDIS_URL`, `PORT`, `ALLOWED_ORIGIN`. Every one has a working default except
+Environment variables: `BETWAY_BASE_URL`, `BETWAY_CONFIG_URL`, `BETWAY_FEEDS_URL`,
+`BETWAY_APIC_URL`, `REDIS_URL`, `PORT`, `ALLOWED_ORIGIN`. Every one has a working default except
 `REDIS_URL`, which is optional by design — the service boots with no environment at all.
 `.env.example` committed with empty values; real values live in the platform's env settings,
 never in the repo (see the secret-scanning / push-protection setup in the main README).

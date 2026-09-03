@@ -272,20 +272,47 @@ requests. The event is logged at `warn` with the code, so an operator can tell i
 
 Feeds the Decode screen's empty state.
 
-**Response `200`**
+`limit`: optional, default 6, max 20. Capped harder than the other list endpoints because it
+drives a fan-out — see the cost note below.
+
+**Response `200`** — `{ codes: Slip[] }`, the same `Slip` `/resolve` returns.
 
 ```json
 {
   "codes": [
-    { "bookingCode": "BW6DF45A44", "selectionCount": 5, "totalOdds": 74.12, "usageCount": 5262 }
+    {
+      "bookingCode": "BW6E5B94E1",
+      "totalOdds": 74.12,
+      "expiresAt": "2026-09-04T09:26:42.970Z",
+      "usageCount": 9227,
+      "selections": [ /* Slip.selections */ ]
+    }
   ]
 }
 ```
 
-Upstream: `GET .../Widget/BookingCodes?skip=0&limit=20&source=sportsradar`. Anonymous, always
-fresh — also the fixture source for local dev and demos.
+**This is the only endpoint that returns a non-null `expiresAt` and `usageCount`.**
+`FindBookABet` reports neither; the catalogue reports both. Joining them is what this endpoint
+is for, and it is why those two fields are nullable on `Slip` everywhere else.
 
-Cache: Redis, TTL 60s.
+Upstream: `GET .../Widget/BookingCodes?skip=0&limit=N&source=sportsradar`, **plus one
+`FindBookABet` per code**. The catalogue carries `bookingCode`, `expiryDateTime`, a usage count
+and a list of bare outcome ids — no names, no prices — so `totalOdds` and `selections` cannot
+come from it. That is a property of the upstream, not a design choice: there is no cheaper way
+to produce this response.
+
+Codes that fail to decode are dropped, and the catalogue is over-fetched to compensate, so a
+request for 6 returns 6 rather than however many happened to survive. Roughly one code in eight
+is expired or withdrawn at any moment. If *every* code fails while the catalogue itself
+answered, that is an upstream outage rather than an empty catalogue, and it returns `502`
+instead of an empty list.
+
+Order is upstream's — the catalogue arrives sorted by usage, descending, and dropping preserves
+it.
+
+Cache: Redis, TTL 60s on the list. Each decode is separately cached under `resolve:{code}` for
+30s and shared with `/resolve`, so a code shown here is already warm when a user clicks it. The
+list TTL is the one that governs freshness, so odds inside can be up to a minute old.
 
 ---
 

@@ -37,9 +37,13 @@ export type Selection = {
 export type Slip = {
   bookingCode: string;
   totalOdds: number;
-  /** ISO 8601, or null when upstream does not report an expiry for this code. */
+  /**
+   * ISO 8601, or null. Non-null only from `GET /api/booking-codes/popular` — decoding a code
+   * does not report an expiry, the public catalogue does, and that endpoint is the one place
+   * the two are joined.
+   */
   expiresAt: string | null;
-  /** How many times the code has been used, when upstream reports it. */
+  /** How many times the code has been used. Non-null on the same terms as `expiresAt`. */
   usageCount: number | null;
   selections: Selection[];
 };
@@ -106,14 +110,6 @@ export type ConvertResult = Slip & {
 /** A newly created booking code. */
 export type CreatedBookingCode = {
   bookingCode: string;
-};
-
-/** One entry in the public catalogue that feeds the Decode empty state. */
-export type PopularBookingCode = {
-  bookingCode: string;
-  selectionCount: number;
-  totalOdds: number;
-  usageCount: number;
 };
 
 export type Sport = {

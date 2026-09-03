@@ -5,7 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { AppError } from '../src/lib/errors.js';
-import { parseFindBookABet, toSlip } from '../src/providers/betway.mapper.js';
+import {
+  parseFindBookABet,
+  parseWidgetBookingCodes,
+  toCatalogueCodes,
+  toSlip,
+} from '../src/providers/betway.mapper.js';
 
 /**
  * The parser is where the mapping traps live, so these are the highest-value tests in the
@@ -269,5 +274,43 @@ describe('parseFindBookABet', () => {
     const raw = { selections: [rawSelection()], isBuildABet: false, accountId: 'x', extra: 1 };
 
     expect(() => parseFindBookABet(raw)).not.toThrow();
+  });
+});
+
+describe('toCatalogueCodes', () => {
+  const codes = toCatalogueCodes(parseWidgetBookingCodes(loadFixture('widget-booking-codes')));
+
+  it('maps the catalogue onto our field names', () => {
+    expect(Object.keys(codes[0]!).sort()).toEqual(['bookingCode', 'expiresAt', 'usageCount']);
+    expect(codes[0]!.bookingCode).toMatch(/^BW[0-9A-F]{8}$/);
+    expect(codes[0]!.usageCount).toBeGreaterThan(0);
+  });
+
+  it('normalises the offset datetime upstream sends to ISO', () => {
+    // Upstream: "2026-09-04T11:26:42.9704472+02:00" — an offset, and 7 fractional digits.
+    expect(codes[0]!.expiresAt).toMatch(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/);
+  });
+
+  it('preserves upstream order, which is already sorted by usage', () => {
+    // Nothing re-sorts, so dropping codes that fail to decode keeps the popularity ranking.
+    const counts = codes.map((code) => code.usageCount);
+    expect(counts).toEqual([...counts].sort((a, b) => b - a));
+  });
+
+  it('survives an entry with no expiry rather than emitting an Invalid Date', () => {
+    const parsed = parseWidgetBookingCodes({
+      data: [{ bookingCode: 'BW6E5B94E1', expiryDateTime: null, count: 1, bets: [] }],
+    });
+
+    expect(toCatalogueCodes(parsed)[0]!.expiresAt).toBeNull();
+  });
+
+  it('turns an unreadable catalogue into upstream_error', () => {
+    try {
+      parseWidgetBookingCodes({ nope: true });
+      expect.unreachable('expected the call to throw');
+    } catch (error) {
+      expect((error as AppError).code).toBe('upstream_error');
+    }
   });
 });
