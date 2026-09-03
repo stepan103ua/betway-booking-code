@@ -26,6 +26,7 @@ SDK ships new stables often enough that hardcoding one in a doc is itself a bad 
 | Networking | `dio` |
 | Testing | `bloc_test` + `mocktail` |
 | Distribution | Firebase App Distribution (APK) |
+| Design | `lib/design/` — the reference implementation of `docs/design-system.md` (tokens, component kit, shared with `apps/web`) |
 
 ---
 
@@ -73,8 +74,8 @@ lib/
         cubit/convert_cubit.dart     loaded slip + drop set + convert
         pages/convert_screen.dart
         widgets/                     convert_leg_row (keep/drop toggle), convert_result_view
-  design/                            ported design-system tokens + core widget kit
-  widgets/slip/                      slip anatomy shared across features (SelectionRow, SlipCard, …)
+  design/                            tokens + core widget kit — implements docs/design-system.md §2–§4
+  widgets/slip/                      slip anatomy (SelectionRow, SlipCard, …) — docs/design-system.md §5–§6
   models/
     slip.dart, selection.dart        mirror packages/contracts §0, shared above features/
     fixture.dart                     Fixture, Market, MarketOutcome — for Create's browse

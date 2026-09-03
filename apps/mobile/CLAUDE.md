@@ -18,11 +18,10 @@ already makes that argument once for the whole repo.
 | `docs/architecture.md` | System overview and the Decode/Convert sequence diagrams |
 | `docs/backend.md` | Why `apps/api` looks the way it does, when a client-side decision seems to assume something about the backend |
 | `docs/betway-api.md` | Upstream traps — rarely relevant here directly, but the reason behind an API behavior this app has to render (e.g. why `expiresAt` is always null) usually traces back to this doc |
+| `docs/design-system.md` | What `lib/design/` and `lib/widgets/slip/` implement — tokens, components, the visual rules. `lib/design/` is that doc's reference implementation, so this app is where it and the doc are most likely to disagree |
 
 If this app's code and a doc disagree, that's a bug in one of them — say so rather than
-silently picking a side. `docs/mobile.md` was written before the design system in `lib/design/`
-and `lib/widgets/slip/` existed; its §2 folder sketch doesn't mention either yet, which is a
-real gap worth closing there, not a reason to ignore what's actually in `lib/`.
+silently picking a side.
 
 ---
 

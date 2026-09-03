@@ -15,7 +15,7 @@ cookbook copy-pasted from memory.
 |---|---|
 | Framework | Next.js 16, App Router, TypeScript |
 | Bundler | Turbopack (default since 16 — no config needed) |
-| Styling | Tailwind CSS + shadcn/ui |
+| Styling | Tailwind CSS + shadcn/ui, restyled to `docs/design-system.md` tokens |
 | Forms / mutations | Server Actions + `useActionState` (React 19.2, bundled with Next 16) |
 | Shared types | `packages/contracts` — imported, not redeclared (§4) |
 | Testing | Vitest + React Testing Library |
@@ -24,6 +24,12 @@ cookbook copy-pasted from memory.
 
 `create-next-app@latest` now scaffolds App Router + TypeScript + Tailwind + ESLint by
 default, so there's no bespoke setup step to document — the defaults are already this stack.
+
+The visual language — colors, type, spacing, components, the slip anatomy — is
+`docs/design-system.md`, shared with `apps/mobile` and already implemented there. shadcn/ui
+supplies the primitives; every one is retinted to those tokens rather than shipped as its
+default. Don't invent web-only colors or radii; a token missing here is missing in
+`lib/design/` too, and gets added to both.
 
 ---
 
