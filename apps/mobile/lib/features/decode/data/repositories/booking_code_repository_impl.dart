@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../../../core/failure.dart';
+import '../../../../models/popular_codes_page.dart';
 import '../../../../models/slip.dart';
 import '../../domain/repositories/booking_code_repository.dart';
 import '../datasources/booking_code_remote_data_source.dart';
@@ -17,28 +18,37 @@ class BookingCodeRepositoryImpl implements BookingCodeRepository {
     try {
       return await _remote.resolve(code);
     } on DioException catch (e) {
-      switch (e.response?.statusCode) {
-        case 404:
-          throw const InvalidCodeFailure();
-        case null:
-          // No response at all: `DioExceptionType.connectionTimeout`,
-          // `.receiveTimeout` and `.connectionError` all land here. One
-          // `Failure` for all three is `docs/mobile.md` §5's call — Decode
-          // has no retry action that would need to tell them apart.
-          throw const NetworkFailure();
-        default:
-          // The API answers every non-2xx with `{ error, message }`
-          // (`docs/backend-api.md` §0), and that `message` is written to be
-          // shown verbatim — a real improvement over `e.message`, which is
-          // `dio`'s own generic "Http status error [500]" and tells a user
-          // nothing. Still falls through to that if the body isn't the
-          // shape expected, same as `docs/mobile.md`'s sketch falls back to
-          // `'Unexpected error.'`.
-          throw UnknownFailure(
-            _serverMessage(e) ?? e.message ?? 'Unexpected error.',
-          );
-      }
+      // A 404 means specifically "no slip for this code" for `resolve` —
+      // that reading doesn't apply to `popular` (a fixed, unparameterised
+      // path can't 404 the same way), so it's handled here rather than in
+      // the shared mapper below.
+      if (e.response?.statusCode == 404) throw const InvalidCodeFailure();
+      throw _mapTransportFailure(e);
     }
+  }
+
+  @override
+  Future<PopularCodesPage> popular({int limit = 6, int skip = 0}) async {
+    try {
+      return await _remote.popular(limit: limit, skip: skip);
+    } on DioException catch (e) {
+      throw _mapTransportFailure(e);
+    }
+  }
+
+  /// No response at all: `DioExceptionType.connectionTimeout`,
+  /// `.receiveTimeout` and `.connectionError` all land here as
+  /// [NetworkFailure] — one `Failure` for all three is `docs/mobile.md`
+  /// §5's call, since neither caller has a retry action that would need to
+  /// tell them apart. Any answered non-2xx becomes [UnknownFailure],
+  /// carrying the server's own `message` (`docs/backend-api.md` §0's
+  /// `ApiError`, written to be shown verbatim) rather than `dio`'s generic
+  /// "Http status error [500]".
+  Failure _mapTransportFailure(DioException e) {
+    if (e.response == null) return const NetworkFailure();
+    return UnknownFailure(
+      _serverMessage(e) ?? e.message ?? 'Unexpected error.',
+    );
   }
 
   String? _serverMessage(DioException e) {

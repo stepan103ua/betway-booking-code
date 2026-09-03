@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../design/app_icons.dart';
 import '../../design/tokens/app_colors.dart';
 import '../../design/tokens/app_typography.dart';
 import '../../design/widgets/app_badge.dart';
 import '../../design/widgets/app_icon_button.dart';
+import 'slip_format.dart';
 
 /// `docs/backend-api.md` §1 is explicit that `resolve` never reports a slip
 /// as expired — `expiresAt` comes back `null` every time, because
@@ -127,7 +127,7 @@ class SlipHeader extends StatelessWidget {
               if (usedCount != null)
                 _Meta(
                   icon: 'users',
-                  label: '${_usageFormat.format(usedCount)} loaded',
+                  label: '${formatUsageCount(usedCount!)} loaded',
                 ),
             ],
           ),
@@ -158,8 +158,3 @@ class _Meta extends StatelessWidget {
     );
   }
 }
-
-/// `en-NG` thousands grouping for usage counts (`4,821 loaded`) — same
-/// digit grouping as `en-US`, `NumberFormat.decimalPattern` just needs the
-/// right locale name so this reads correctly if that ever changes.
-final _usageFormat = NumberFormat.decimalPattern('en_NG');

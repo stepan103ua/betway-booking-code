@@ -7,6 +7,7 @@ import '../../../../core/di.dart';
 import '../../../../core/failure.dart';
 import '../../../../design/app_icons.dart';
 import '../../../../design/tokens/app_colors.dart';
+import '../../../../design/tokens/app_motion.dart';
 import '../../../../design/tokens/app_radius.dart';
 import '../../../../design/tokens/app_typography.dart';
 import '../../../../design/widgets/app_alert.dart';
@@ -14,11 +15,16 @@ import '../../../../design/widgets/app_badge.dart';
 import '../../../../design/widgets/app_bottom_sheet.dart';
 import '../../../../design/widgets/app_button.dart';
 import '../../../../design/widgets/app_card.dart';
+import '../../../../design/widgets/app_skeleton.dart';
 import '../../../../design/widgets/dashed_border.dart';
 import '../../../../models/slip.dart';
 import '../../../../widgets/slip/code_input.dart';
+import '../../../../widgets/slip/selection_row.dart';
 import '../../../../widgets/slip/slip_card.dart';
+import '../../../../widgets/slip/slip_format.dart';
 import '../../../../widgets/slip/slip_skeleton.dart';
+import '../cubit/popular_codes_cubit.dart';
+import '../cubit/popular_codes_state.dart';
 import '../cubit/slip_cubit.dart';
 import '../cubit/slip_state.dart';
 
@@ -40,8 +46,11 @@ class DecodeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) => getIt<SlipCubit>(),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(create: (_) => getIt<SlipCubit>()),
+        BlocProvider(create: (_) => getIt<PopularCodesCubit>()..load()),
+      ],
       child: _DecodeView(onConvert: onConvert),
     );
   }
@@ -172,7 +181,7 @@ class _DecodeViewState extends State<_DecodeView> {
             "You'll see every selection, the market, the odds and whether the slip is still live — before you stake anything.",
       ),
       const SizedBox(height: 16),
-      _ExampleCodes(onPick: (c) => setState(() => _controller.text = c)),
+      _PopularCodes(onUse: (c) => setState(() => _controller.text = c)),
     ];
   }
 
@@ -316,63 +325,240 @@ class _DecodeViewState extends State<_DecodeView> {
   }
 }
 
-/// A handful of codes to try, not a history the app doesn't keep — nothing
-/// persists a decode yet, so calling this "recently decoded" (the source
-/// kit's own label) would claim a feature that isn't there.
-class _ExampleCodes extends StatelessWidget {
-  const _ExampleCodes({required this.onPick});
-  final ValueChanged<String> onPick;
-
-  static const _examples = [
-    ('BW6E19810C', 'A resolved slip'),
-    ('BW3P77M42A', "A code that's expired or unknown"),
-    ('BWDEADBEEF', "Shape is right, doesn't exist"),
-  ];
+/// Live codes from `GET /api/booking-codes/popular` (`docs/backend-api.md`
+/// §1) — the endpoint exists specifically to feed this empty state, so this
+/// is the one section of the app that was never going to be a hardcoded
+/// list. Failure here is quiet on purpose: this is a convenience, not the
+/// thing the user came to do, so it degrades to nothing rather than an
+/// alert competing with the actual decode flow above it.
+class _PopularCodes extends StatelessWidget {
+  const _PopularCodes({required this.onUse});
+  final ValueChanged<String> onUse;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'TRY A CODE',
-          style: AppTypography.label.copyWith(color: colors.textMuted),
-        ),
-        const SizedBox(height: 8),
-        for (final (code, meta) in _examples) ...[
-          AppCard(
-            tone: AppCardTone.raised,
-            padding: AppCardPadding.sm,
-            radius: AppRadius.md,
-            interactive: true,
-            onTap: () => onPick(code),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  code,
-                  style: AppTypography.code.copyWith(color: colors.textPrimary),
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      meta,
-                      style: AppTypography.meta.copyWith(
-                        color: colors.textMuted,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    AppIcon('chevron-right', size: 14, color: colors.textMuted),
-                  ],
-                ),
+    return BlocBuilder<PopularCodesCubit, PopularCodesState>(
+      builder: (context, state) {
+        final body = switch (state) {
+          PopularCodesLoading() => [
+            for (var i = 0; i < 3; i++) ...[
+              const _PopularCodeSkeleton(),
+              const SizedBox(height: 8),
+            ],
+          ],
+          PopularCodesError() => [
+            Text(
+              "Couldn't load codes to try right now.",
+              style: AppTypography.meta.copyWith(color: colors.textMuted),
+            ),
+          ],
+          PopularCodesLoaded(:final codes) when codes.isEmpty => [
+            Text(
+              'Nothing to try right now — paste a code above instead.',
+              style: AppTypography.meta.copyWith(color: colors.textMuted),
+            ),
+          ],
+          PopularCodesLoaded(:final codes) => [
+            for (final slip in codes) ...[
+              _PopularCodeTile(slip: slip, onUse: onUse),
+              const SizedBox(height: 8),
+            ],
+          ],
+        };
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'POPULAR CODES',
+              style: AppTypography.label.copyWith(color: colors.textMuted),
+            ),
+            const SizedBox(height: 8),
+            ...body,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _PopularCodeSkeleton extends StatelessWidget {
+  const _PopularCodeSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      tone: AppCardTone.raised,
+      padding: AppCardPadding.sm,
+      radius: AppRadius.md,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                AppSkeleton(width: 120, height: 14),
+                SizedBox(height: 8),
+                AppSkeleton(width: 160, height: 11),
               ],
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(width: 8),
+          const AppSkeleton(width: 16, height: 16, radius: AppRadius.xs),
         ],
-      ],
+      ),
+    );
+  }
+}
+
+/// One live code: a collapsed summary (code, odds, leg count) that expands
+/// in place to the same [SelectionRow] list a resolved slip shows, with a
+/// button to actually decode it. Replaces a plain tap-to-fill row — a
+/// booking code alone tells a user nothing worth tapping for.
+class _PopularCodeTile extends StatefulWidget {
+  const _PopularCodeTile({required this.slip, required this.onUse});
+  final Slip slip;
+  final ValueChanged<String> onUse;
+
+  @override
+  State<_PopularCodeTile> createState() => _PopularCodeTileState();
+}
+
+class _PopularCodeTileState extends State<_PopularCodeTile> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final slip = widget.slip;
+    final dead = slip.selections.where((s) => !s.isActive).length;
+
+    return AppCard(
+      tone: AppCardTone.raised,
+      padding: AppCardPadding.none,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Semantics(
+            button: true,
+            expanded: _expanded,
+            label:
+                'Booking code ${slip.bookingCode}, ${slip.selections.length} '
+                'selections, odds ${slip.totalOdds.toStringAsFixed(2)}',
+            child: GestureDetector(
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  slip.bookingCode,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.code.copyWith(
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              AppBadge(
+                                label: slip.totalOdds.toStringAsFixed(2),
+                                tone: AppBadgeTone.accent,
+                                mono: true,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 6,
+                            children: [
+                              Text(
+                                '${slip.selections.length} '
+                                '${slip.selections.length == 1 ? 'selection' : 'selections'}',
+                                style: AppTypography.meta.copyWith(
+                                  color: colors.textMuted,
+                                ),
+                              ),
+                              if (dead > 0)
+                                Text(
+                                  '· $dead dead',
+                                  style: AppTypography.meta.copyWith(
+                                    color: colors.warnText,
+                                  ),
+                                ),
+                              if (slip.expiresAt != null)
+                                Text(
+                                  '· ${formatExpiry(slip.expiresAt!)}',
+                                  style: AppTypography.meta.copyWith(
+                                    color: colors.textMuted,
+                                  ),
+                                ),
+                              if (slip.usageCount != null)
+                                Text(
+                                  '· ${formatUsageCount(slip.usageCount!)} loaded',
+                                  style: AppTypography.meta.copyWith(
+                                    color: colors.textMuted,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    AnimatedRotation(
+                      turns: _expanded ? 0.25 : 0,
+                      duration: AppMotion.fast,
+                      curve: AppMotion.easeOut,
+                      child: AppIcon(
+                        'chevron-right',
+                        size: 16,
+                        color: colors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_expanded) ...[
+            Container(
+              color: colors.surfaceRow,
+              child: Column(
+                children: [
+                  for (var i = 0; i < slip.selections.length; i++)
+                    SelectionRow(selection: slip.selections[i], index: i + 1),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: AppButton(
+                label: 'Decode this code',
+                variant: AppButtonVariant.secondary,
+                icon: 'scan-line',
+                fullWidth: true,
+                onPressed: () => widget.onUse(slip.bookingCode),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:get_it/get_it.dart';
 import '../features/decode/data/datasources/booking_code_remote_data_source.dart';
 import '../features/decode/data/repositories/booking_code_repository_impl.dart';
 import '../features/decode/domain/repositories/booking_code_repository.dart';
+import '../features/decode/presentation/cubit/popular_codes_cubit.dart';
 import '../features/decode/presentation/cubit/slip_cubit.dart';
 import 'network/dio_client.dart';
 
@@ -25,4 +26,5 @@ void setupDependencies() {
     () => BookingCodeRepositoryImpl(getIt()),
   );
   getIt.registerFactory(() => SlipCubit(getIt()));
+  getIt.registerFactory(() => PopularCodesCubit(getIt()));
 }

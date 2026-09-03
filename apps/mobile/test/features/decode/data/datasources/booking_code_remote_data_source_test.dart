@@ -132,4 +132,61 @@ void main() {
       throwsA(isA<DioException>()),
     );
   });
+
+  test(
+    'gets /api/booking-codes/popular with limit and skip as query params',
+    () async {
+      when(() => adapter.fetch(any(), any(), any())).thenAnswer(
+        (_) async => jsonResponse({
+          'codes': <Map<String, dynamic>>[],
+          'skip': 0,
+          'limit': 3,
+          'total': 120,
+          'hasMore': true,
+        }, 200),
+      );
+
+      await dataSource.popular(limit: 3, skip: 0);
+
+      final options =
+          verify(
+                () => adapter.fetch(captureAny(), any(), any()),
+              ).captured.single
+              as RequestOptions;
+      expect(options.method, 'GET');
+      expect(options.path, '/api/booking-codes/popular');
+      expect(options.queryParameters, {'limit': 3, 'skip': 0});
+    },
+  );
+
+  test(
+    'parses a popular-codes page, including non-null expiresAt/usageCount',
+    () async {
+      when(() => adapter.fetch(any(), any(), any())).thenAnswer(
+        (_) async => jsonResponse({
+          'codes': [
+            {
+              'bookingCode': 'BW6E5B94E1',
+              'totalOdds': 74.12,
+              'expiresAt': '2026-09-04T09:26:42.970Z',
+              'usageCount': 9227,
+              'selections': <Map<String, dynamic>>[],
+            },
+          ],
+          'skip': 0,
+          'limit': 6,
+          'total': 120,
+          'hasMore': true,
+        }, 200),
+      );
+
+      final page = await dataSource.popular();
+
+      expect(page.codes, hasLength(1));
+      expect(page.codes.single.expiresAt, '2026-09-04T09:26:42.970Z');
+      expect(page.codes.single.usageCount, 9227);
+      expect(page.hasMore, isTrue);
+      expect(page.total, 120);
+    },
+  );
 }

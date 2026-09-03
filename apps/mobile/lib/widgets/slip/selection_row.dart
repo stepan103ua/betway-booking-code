@@ -6,7 +6,7 @@ import '../../design/tokens/app_spacing.dart';
 import '../../design/tokens/app_typography.dart';
 import '../../design/widgets/app_badge.dart';
 import '../../models/selection.dart';
-import 'kickoff_format.dart';
+import 'slip_format.dart';
 
 /// One leg of a slip. Compact enough for 16 rows on a 390px screen —
 /// three lines, constant baseline pattern, per the design system's

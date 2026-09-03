@@ -1,6 +1,7 @@
 import 'package:booking_code/core/failure.dart';
 import 'package:booking_code/features/decode/data/datasources/booking_code_remote_data_source.dart';
 import 'package:booking_code/features/decode/data/repositories/booking_code_repository_impl.dart';
+import 'package:booking_code/models/popular_codes_page.dart';
 import 'package:booking_code/models/selection.dart';
 import 'package:booking_code/models/slip.dart';
 import 'package:dio/dio.dart';
@@ -120,5 +121,36 @@ void main() {
     } on UnknownFailure catch (f) {
       expect(f.message, isNotEmpty);
     }
+  });
+
+  const page = PopularCodesPage(
+    codes: [slip],
+    skip: 0,
+    limit: 3,
+    total: 120,
+    hasMore: true,
+  );
+
+  test('popular returns the page the data source resolves', () async {
+    when(() => remote.popular(limit: 3, skip: 0)).thenAnswer((_) async => page);
+
+    final result = await repository.popular(limit: 3, skip: 0);
+
+    expect(result, page);
+  });
+
+  test('popular maps no response to NetworkFailure', () async {
+    when(() => remote.popular(limit: 6, skip: 0)).thenThrow(dioError());
+
+    expect(() => repository.popular(), throwsA(isA<NetworkFailure>()));
+  });
+
+  test('popular maps a 404 to UnknownFailure, not InvalidCodeFailure — that '
+      'reading is specific to resolve()', () async {
+    when(
+      () => remote.popular(limit: 6, skip: 0),
+    ).thenThrow(dioError(statusCode: 404));
+
+    expect(() => repository.popular(), throwsA(isA<UnknownFailure>()));
   });
 }

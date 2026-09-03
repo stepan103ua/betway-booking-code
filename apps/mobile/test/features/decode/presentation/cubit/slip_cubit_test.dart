@@ -2,6 +2,7 @@ import 'package:booking_code/core/failure.dart';
 import 'package:booking_code/features/decode/domain/repositories/booking_code_repository.dart';
 import 'package:booking_code/features/decode/presentation/cubit/slip_cubit.dart';
 import 'package:booking_code/features/decode/presentation/cubit/slip_state.dart';
+import 'package:booking_code/models/popular_codes_page.dart';
 import 'package:booking_code/models/selection.dart';
 import 'package:booking_code/models/slip.dart';
 import 'package:bloc_test/bloc_test.dart';
@@ -23,6 +24,10 @@ class _FakeRepository implements BookingCodeRepository {
     if (_failure != null) throw _failure;
     return _slip!;
   }
+
+  @override
+  Future<PopularCodesPage> popular({int limit = 6, int skip = 0}) =>
+      throw UnimplementedError('SlipCubit never calls popular()');
 }
 
 void main() {
