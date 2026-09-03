@@ -21,7 +21,8 @@ same fact drift; the docs say so themselves (`backend.md` §4).
 | `docs/backend.md` | Stack, folder structure, caching policy, cross-cutting concerns, deploy |
 | `docs/betway-api.md` | Verified upstream endpoints, payloads, ID scheme, and the traps |
 | `docs/architecture.md` | How the pieces fit; the Decode and Convert flows as diagrams |
-| `docs/frontend.md`, `docs/mobile.md` | The two clients. Not built yet |
+| `docs/frontend.md`, `docs/mobile.md` | The two clients — `apps/mobile` is built, `apps/web` is not |
+| `docs/design-system.md` | Tokens, components and visual rules shared by both clients — `apps/mobile/lib/design/` is the reference implementation |
 
 If code and a doc disagree, that is a bug in one of them — say so rather than silently
 picking a side.
