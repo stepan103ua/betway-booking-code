@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:booking_code/core/failure.dart';
 import 'package:booking_code/features/decode/domain/repositories/booking_code_repository.dart';
 import 'package:booking_code/features/decode/presentation/cubit/slip_cubit.dart';
@@ -28,6 +30,26 @@ class _FakeRepository implements BookingCodeRepository {
   @override
   Future<PopularCodesPage> popular({int limit = 6, int skip = 0}) =>
       throw UnimplementedError('SlipCubit never calls popular()');
+}
+
+/// Resolves only after [release] is called — long enough for a test to close
+/// the Cubit while the request is still in flight.
+class _GatedRepository implements BookingCodeRepository {
+  _GatedRepository(this._slip);
+  final Slip _slip;
+  final _gate = Completer<void>();
+
+  void release() => _gate.complete();
+
+  @override
+  Future<Slip> resolve(String code) async {
+    await _gate.future;
+    return _slip;
+  }
+
+  @override
+  Future<PopularCodesPage> popular({int limit = 6, int skip = 0}) =>
+      throw UnimplementedError();
 }
 
 void main() {
@@ -68,6 +90,21 @@ void main() {
       const SlipState.error(InvalidCodeFailure()),
     ],
   );
+
+  test('resolve does not emit (or throw) after the Cubit is closed', () async {
+    final repo = _GatedRepository(slip);
+    final cubit = SlipCubit(repo);
+    final states = <SlipState>[];
+    final sub = cubit.stream.listen(states.add);
+
+    final pending = cubit.resolve('BW6E19810C'); // emits loading, then awaits
+    await cubit.close(); // user leaves the Decode tab
+    repo.release(); // response finally lands
+    await pending; // must complete without a StateError
+
+    expect(states, [const SlipState.loading()]); // no post-close loaded emit
+    await sub.cancel();
+  });
 
   blocTest<SlipCubit, SlipState>(
     'reset() returns to initial from any state',

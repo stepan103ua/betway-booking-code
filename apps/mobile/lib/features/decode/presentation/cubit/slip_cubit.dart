@@ -19,8 +19,13 @@ class SlipCubit extends Cubit<SlipState> {
     emit(const SlipState.loading());
     try {
       final slip = await _repository.resolve(code);
+      // The Decode tab can be swapped out (and this Cubit closed) while the
+      // request is in flight — a real move on a slow connection. `emit` after
+      // `close()` throws, so bail before every post-`await` emit.
+      if (isClosed) return;
       emit(SlipState.loaded(slip));
     } on Failure catch (f) {
+      if (isClosed) return;
       emit(SlipState.error(f));
     }
   }

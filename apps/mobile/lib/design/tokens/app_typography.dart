@@ -6,9 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 /// tracking — but never color: the CSS keeps `font:` and `color:` as separate
 /// declarations, and this does the same, so a widget applies
 /// `AppTypography.body.copyWith(color: colors.textPrimary)` rather than baking
-/// one fixed color into a role two different screens tint differently
-/// (compare `SlipHeader`'s odds, which turn `textDisabled` once a slip is
-/// expired, with `CodeResult`'s, which don't).
+/// one fixed color into a role two different screens tint differently (the
+/// `odds` role is `oddsText` on a live leg and `textDisabled`, struck through,
+/// on a dead one — same `TextStyle`, different color at the call site).
 ///
 /// Font substitution: no binaries were supplied with the design system, so —
 /// same as the web build's `tokens/fonts.css` — Archivo and JetBrains Mono

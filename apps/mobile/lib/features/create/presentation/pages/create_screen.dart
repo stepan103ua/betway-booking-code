@@ -99,6 +99,11 @@ class _SportsError extends StatelessWidget {
   }
 }
 
+/// The whole picker is one [CustomScrollView] rather than a `ListView` with a
+/// `Column` of tiles inside it: the fixture list grows a page at a time via
+/// "load more" and is genuinely unbounded, so its tiles build lazily as a
+/// `SliverList.builder`. A chip tap still rebuilds this subtree (the draft
+/// changed), but now only the tiles actually on screen rebuild with it.
 class _Picker extends StatelessWidget {
   const _Picker({required this.state});
   final CreateReady state;
@@ -108,48 +113,61 @@ class _Picker extends StatelessWidget {
     final createCubit = context.read<CreateCubit>();
     final selectedOutcomeIds = {for (final p in state.picks) p.outcomeId};
     final pickedEventIds = {for (final p in state.picks) p.eventId};
+    final colors = context.colors;
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 24),
-      children: [
-        const SizedBox(height: 4),
-        SportSelector(
-          sports: state.sports,
-          selectedId: state.selectedSport.id,
-          onSelect: createCubit.selectSport,
-        ),
-        const SizedBox(height: 16),
-        if (state.picks.isEmpty)
-          const EmptyState(
-            icon: 'wand-sparkles',
-            title: 'Build a slip',
-            body:
-                'Tap the odds on any fixture below to add a leg. Open "More '
-                'markets" for totals, handicaps and the rest.',
-          )
-        else
-          DraftTray(
-            state: state,
-            onRemove: createCubit.toggleOutcome,
-            onClear: createCubit.clearDraft,
-            onGenerate: createCubit.generate,
-            onRefreshEvents: () =>
-                context.read<EventsCubit>().load(state.selectedSport.id),
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 4),
+              SportSelector(
+                sports: state.sports,
+                selectedId: state.selectedSport.id,
+                onSelect: createCubit.selectSport,
+              ),
+              const SizedBox(height: 16),
+              if (state.picks.isEmpty)
+                const EmptyState(
+                  icon: 'wand-sparkles',
+                  title: 'Build a slip',
+                  body:
+                      'Tap the odds on any fixture below to add a leg. Open '
+                      '"More markets" for totals, handicaps and the rest.',
+                )
+              else
+                DraftTray(
+                  state: state,
+                  onRemove: createCubit.toggleOutcome,
+                  onClear: createCubit.clearDraft,
+                  onGenerate: createCubit.generate,
+                  onRefreshEvents: () =>
+                      context.read<EventsCubit>().load(state.selectedSport.id),
+                ),
+              const SizedBox(height: 20),
+              Text(
+                'UPCOMING',
+                style: AppTypography.label.copyWith(color: colors.textMuted),
+              ),
+              const SizedBox(height: 10),
+            ],
           ),
-        const SizedBox(height: 20),
-        _EventsSection(
+        ),
+        _EventsSliver(
           selectedOutcomeIds: selectedOutcomeIds,
           pickedEventIds: pickedEventIds,
           draftFull: state.isFull,
           sportName: state.selectedSport.name,
         ),
+        const SliverToBoxAdapter(child: SizedBox(height: 24)),
       ],
     );
   }
 }
 
-class _EventsSection extends StatelessWidget {
-  const _EventsSection({
+class _EventsSliver extends StatelessWidget {
+  const _EventsSliver({
     required this.selectedOutcomeIds,
     required this.pickedEventIds,
     required this.draftFull,
@@ -164,42 +182,38 @@ class _EventsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'UPCOMING',
-          style: AppTypography.label.copyWith(color: colors.textMuted),
+    return BlocBuilder<EventsCubit, EventsState>(
+      builder: (context, state) => switch (state) {
+        EventsLoading() => const SliverToBoxAdapter(
+          child: _EventListSkeleton(),
         ),
-        const SizedBox(height: 10),
-        BlocBuilder<EventsCubit, EventsState>(
-          builder: (context, state) => switch (state) {
-            EventsLoading() => const _EventListSkeleton(),
-            EventsError(:final failure) => AppAlert(
-              tone: AppAlertTone.danger,
-              title: "Couldn't load fixtures",
-              body: failure.message,
-              action: AppButton(
-                label: 'Try again',
-                variant: AppButtonVariant.secondary,
-                size: AppButtonSize.sm,
-                icon: 'rotate-ccw',
-                onPressed: () => _reload(context),
-              ),
+        EventsError(:final failure) => SliverToBoxAdapter(
+          child: AppAlert(
+            tone: AppAlertTone.danger,
+            title: "Couldn't load fixtures",
+            body: failure.message,
+            action: AppButton(
+              label: 'Try again',
+              variant: AppButtonVariant.secondary,
+              size: AppButtonSize.sm,
+              icon: 'rotate-ccw',
+              onPressed: () => _reload(context),
             ),
-            EventsLoaded(:final events) when events.isEmpty => Text(
-              'No upcoming $sportName fixtures right now.',
-              style: AppTypography.meta.copyWith(color: colors.textMuted),
-            ),
-            EventsLoaded() => _EventList(
-              state: state,
-              selectedOutcomeIds: selectedOutcomeIds,
-              pickedEventIds: pickedEventIds,
-              draftFull: draftFull,
-            ),
-          },
+          ),
         ),
-      ],
+        EventsLoaded(:final events) when events.isEmpty => SliverToBoxAdapter(
+          child: Text(
+            'No upcoming $sportName fixtures right now.',
+            style: AppTypography.meta.copyWith(color: colors.textMuted),
+          ),
+        ),
+        EventsLoaded() => _EventListSliver(
+          state: state,
+          selectedOutcomeIds: selectedOutcomeIds,
+          pickedEventIds: pickedEventIds,
+          draftFull: draftFull,
+        ),
+      },
     );
   }
 
@@ -211,8 +225,8 @@ class _EventsSection extends StatelessWidget {
   }
 }
 
-class _EventList extends StatelessWidget {
-  const _EventList({
+class _EventListSliver extends StatelessWidget {
+  const _EventListSliver({
     required this.state,
     required this.selectedOutcomeIds,
     required this.pickedEventIds,
@@ -227,11 +241,18 @@ class _EventList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final createCubit = context.read<CreateCubit>();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (final event in state.events) ...[
-          EventTile(
+    final events = state.events;
+    // One extra row for the "load more" footer when there is another page.
+    final itemCount = events.length + (state.hasMore ? 1 : 0);
+
+    return SliverList.builder(
+      itemCount: itemCount,
+      itemBuilder: (context, i) {
+        if (i == events.length) return _LoadMore(state: state);
+        final event = events[i];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: EventTile(
             event: event,
             selectedOutcomeIds: selectedOutcomeIds,
             draftFull: draftFull,
@@ -239,12 +260,36 @@ class _EventList extends StatelessWidget {
             onToggle: createCubit.toggleOutcome,
             onMoreMarkets: () => openMarketPickerSheet(context, event),
           ),
-          const SizedBox(height: 10),
-        ],
-        if (state.hasMore) ...[
-          const SizedBox(height: 2),
+        );
+      },
+    );
+  }
+}
+
+class _LoadMore extends StatelessWidget {
+  const _LoadMore({required this.state});
+  final EventsLoaded state;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (state.loadMoreError != null) ...[
+            Text(
+              '${state.loadMoreError!.message} Tap to try again.',
+              style: AppTypography.meta.copyWith(
+                color: context.colors.dangerText,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           AppButton(
-            label: 'Load more fixtures',
+            label: state.loadMoreError != null
+                ? 'Retry loading fixtures'
+                : 'Load more fixtures',
             variant: AppButtonVariant.secondary,
             icon: 'chevron-right',
             fullWidth: true,
@@ -252,7 +297,7 @@ class _EventList extends StatelessWidget {
             onPressed: () => context.read<EventsCubit>().loadMore(),
           ),
         ],
-      ],
+      ),
     );
   }
 }

@@ -20,6 +20,9 @@ class CreateCubit extends Cubit<CreateState> {
     emit(const CreateState.loadingSports());
     try {
       final sports = await _repository.sports();
+      // The Create tab can be left (closing this Cubit) while the request is
+      // still running; `emit` after `close()` throws.
+      if (isClosed) return;
       if (sports.isEmpty) {
         emit(
           const CreateState.sportsError(
@@ -30,6 +33,7 @@ class CreateCubit extends Cubit<CreateState> {
       }
       emit(CreateState.ready(sports: sports, selectedSport: sports.first));
     } on Failure catch (f) {
+      if (isClosed) return;
       emit(CreateState.sportsError(f));
     }
   }
@@ -81,6 +85,7 @@ class CreateCubit extends Cubit<CreateState> {
       final code = await _repository.create(
         s.picks.map((p) => p.outcomeId).toList(growable: false),
       );
+      if (isClosed) return; // Create tab left mid-generate
       // Re-read the latest state: nothing else mutates it during the await,
       // but reading `s` keeps this honest if that ever changes.
       final now = state;
@@ -88,6 +93,7 @@ class CreateCubit extends Cubit<CreateState> {
         emit(now.copyWith(generating: false, createdCode: code));
       }
     } on Failure catch (f) {
+      if (isClosed) return;
       final now = state;
       if (now is CreateReady) {
         emit(now.copyWith(generating: false, generateError: f));

@@ -122,11 +122,11 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  loading,TResult Function( List<Fixture> events,  bool hasMore,  int nextSkip,  bool loadingMore)?  loaded,TResult Function( Failure failure)?  error,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  loading,TResult Function( List<Fixture> events,  bool hasMore,  int nextSkip,  bool loadingMore,  Failure? loadMoreError)?  loaded,TResult Function( Failure failure)?  error,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case EventsLoading() when loading != null:
 return loading();case EventsLoaded() when loaded != null:
-return loaded(_that.events,_that.hasMore,_that.nextSkip,_that.loadingMore);case EventsError() when error != null:
+return loaded(_that.events,_that.hasMore,_that.nextSkip,_that.loadingMore,_that.loadMoreError);case EventsError() when error != null:
 return error(_that.failure);case _:
   return orElse();
 
@@ -145,11 +145,11 @@ return error(_that.failure);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  loading,required TResult Function( List<Fixture> events,  bool hasMore,  int nextSkip,  bool loadingMore)  loaded,required TResult Function( Failure failure)  error,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  loading,required TResult Function( List<Fixture> events,  bool hasMore,  int nextSkip,  bool loadingMore,  Failure? loadMoreError)  loaded,required TResult Function( Failure failure)  error,}) {final _that = this;
 switch (_that) {
 case EventsLoading():
 return loading();case EventsLoaded():
-return loaded(_that.events,_that.hasMore,_that.nextSkip,_that.loadingMore);case EventsError():
+return loaded(_that.events,_that.hasMore,_that.nextSkip,_that.loadingMore,_that.loadMoreError);case EventsError():
 return error(_that.failure);}
 }
 /// A variant of `when` that fallback to returning `null`
@@ -164,11 +164,11 @@ return error(_that.failure);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  loading,TResult? Function( List<Fixture> events,  bool hasMore,  int nextSkip,  bool loadingMore)?  loaded,TResult? Function( Failure failure)?  error,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  loading,TResult? Function( List<Fixture> events,  bool hasMore,  int nextSkip,  bool loadingMore,  Failure? loadMoreError)?  loaded,TResult? Function( Failure failure)?  error,}) {final _that = this;
 switch (_that) {
 case EventsLoading() when loading != null:
 return loading();case EventsLoaded() when loaded != null:
-return loaded(_that.events,_that.hasMore,_that.nextSkip,_that.loadingMore);case EventsError() when error != null:
+return loaded(_that.events,_that.hasMore,_that.nextSkip,_that.loadingMore,_that.loadMoreError);case EventsError() when error != null:
 return error(_that.failure);case _:
   return null;
 
@@ -213,7 +213,7 @@ String toString() {
 
 
 class EventsLoaded implements EventsState {
-  const EventsLoaded({required final  List<Fixture> events, required this.hasMore, required this.nextSkip, this.loadingMore = false}): _events = events;
+  const EventsLoaded({required final  List<Fixture> events, required this.hasMore, required this.nextSkip, this.loadingMore = false, this.loadMoreError}): _events = events;
   
 
  final  List<Fixture> _events;
@@ -226,6 +226,7 @@ class EventsLoaded implements EventsState {
  final  bool hasMore;
  final  int nextSkip;
 @JsonKey() final  bool loadingMore;
+ final  Failure? loadMoreError;
 
 /// Create a copy of EventsState
 /// with the given fields replaced by the non-null parameter values.
@@ -237,16 +238,16 @@ $EventsLoadedCopyWith<EventsLoaded> get copyWith => _$EventsLoadedCopyWithImpl<E
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is EventsLoaded&&const DeepCollectionEquality().equals(other._events, _events)&&(identical(other.hasMore, hasMore) || other.hasMore == hasMore)&&(identical(other.nextSkip, nextSkip) || other.nextSkip == nextSkip)&&(identical(other.loadingMore, loadingMore) || other.loadingMore == loadingMore));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is EventsLoaded&&const DeepCollectionEquality().equals(other._events, _events)&&(identical(other.hasMore, hasMore) || other.hasMore == hasMore)&&(identical(other.nextSkip, nextSkip) || other.nextSkip == nextSkip)&&(identical(other.loadingMore, loadingMore) || other.loadingMore == loadingMore)&&(identical(other.loadMoreError, loadMoreError) || other.loadMoreError == loadMoreError));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_events),hasMore,nextSkip,loadingMore);
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_events),hasMore,nextSkip,loadingMore,loadMoreError);
 
 @override
 String toString() {
-  return 'EventsState.loaded(events: $events, hasMore: $hasMore, nextSkip: $nextSkip, loadingMore: $loadingMore)';
+  return 'EventsState.loaded(events: $events, hasMore: $hasMore, nextSkip: $nextSkip, loadingMore: $loadingMore, loadMoreError: $loadMoreError)';
 }
 
 
@@ -257,7 +258,7 @@ abstract mixin class $EventsLoadedCopyWith<$Res> implements $EventsStateCopyWith
   factory $EventsLoadedCopyWith(EventsLoaded value, $Res Function(EventsLoaded) _then) = _$EventsLoadedCopyWithImpl;
 @useResult
 $Res call({
- List<Fixture> events, bool hasMore, int nextSkip, bool loadingMore
+ List<Fixture> events, bool hasMore, int nextSkip, bool loadingMore, Failure? loadMoreError
 });
 
 
@@ -274,13 +275,14 @@ class _$EventsLoadedCopyWithImpl<$Res>
 
 /// Create a copy of EventsState
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? events = null,Object? hasMore = null,Object? nextSkip = null,Object? loadingMore = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? events = null,Object? hasMore = null,Object? nextSkip = null,Object? loadingMore = null,Object? loadMoreError = freezed,}) {
   return _then(EventsLoaded(
 events: null == events ? _self._events : events // ignore: cast_nullable_to_non_nullable
 as List<Fixture>,hasMore: null == hasMore ? _self.hasMore : hasMore // ignore: cast_nullable_to_non_nullable
 as bool,nextSkip: null == nextSkip ? _self.nextSkip : nextSkip // ignore: cast_nullable_to_non_nullable
 as int,loadingMore: null == loadingMore ? _self.loadingMore : loadingMore // ignore: cast_nullable_to_non_nullable
-as bool,
+as bool,loadMoreError: freezed == loadMoreError ? _self.loadMoreError : loadMoreError // ignore: cast_nullable_to_non_nullable
+as Failure?,
   ));
 }
 

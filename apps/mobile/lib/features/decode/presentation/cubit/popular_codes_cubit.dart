@@ -18,8 +18,10 @@ class PopularCodesCubit extends Cubit<PopularCodesState> {
     emit(const PopularCodesState.loading());
     try {
       final page = await _repository.popular(limit: 3);
+      if (isClosed) return; // tab swapped out mid-request; `emit` would throw
       emit(PopularCodesState.loaded(page.codes));
     } on Failure catch (f) {
+      if (isClosed) return;
       emit(PopularCodesState.error(f));
     }
   }
