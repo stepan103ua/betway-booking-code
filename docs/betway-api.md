@@ -367,8 +367,25 @@ GET https://apic.betwayafrica.com/api/v1/Widget/BookingCodes?skip=0&limit=6&sour
 }
 ```
 
-120 live codes, refreshed continuously, anonymous, always-valid. Use for the Decode empty
-state's "popular codes" list and for offline fixtures/mocks.
+120 live codes, refreshed continuously, anonymous. Use for the Decode empty state's "popular
+codes" list and for offline fixtures/mocks.
+
+Four things verified on a live sample (2026-09-03), all of which shape what can be built on it:
+
+- **No odds anywhere in the payload.** An entry is `bookingCode`, `expiryDateTime`, `count` and
+  `bets[]` of bare `{eventID, marketID, outcomeID}`. A total price, or any human-readable name,
+  costs one `FindBookABet` per code. There is no cheaper route.
+- **`expiryDateTime` and `count` exist here and nowhere else.** `FindBookABet` returns neither
+  (§2), so this endpoint is the only source of a slip's expiry and use count.
+- **Already sorted by `count`, descending** — over 20 sampled entries, strictly. Popularity
+  ordering is free; nothing needs to re-sort.
+- **"always-valid" is not quite true: about one code in eight fails to decode.** Of 8 sampled,
+  7 returned slips whose leg counts matched `bets.length` exactly and one returned
+  `BookABetInvalidCode`. Anything enriching this list has to expect that and carry slack.
+
+`expiryDateTime` is an offset datetime with sub-second precision
+(`2026-09-04T11:26:42.9704472+02:00`), so it needs normalising like any other date. Codes run
+5–35 legs, median around 15 — twenty enriched codes is roughly 700 selections on the wire.
 
 ---
 

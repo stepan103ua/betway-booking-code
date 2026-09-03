@@ -1,7 +1,13 @@
 import type { Request, Response } from 'express';
 
 import type { BookingCodesService } from '../services/booking-codes.service.js';
-import type { ConvertBody, CreateBody, ResolveBody } from '../schemas/booking-codes.schema.js';
+import { validatedQuery } from '../middleware/validate.js';
+import type {
+  ConvertBody,
+  CreateBody,
+  PopularQuery,
+  ResolveBody,
+} from '../schemas/booking-codes.schema.js';
 
 /**
  * TODO: request in, service call, response out. Nothing else.
@@ -35,6 +41,7 @@ export class BookingCodesController {
   };
 
   popular = async (_req: Request, res: Response): Promise<void> => {
-    res.json({ codes: await this.service.popular(20) });
+    const { limit } = validatedQuery<PopularQuery>(res);
+    res.json({ codes: await this.service.popular(limit) });
   };
 }

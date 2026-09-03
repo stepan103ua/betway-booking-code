@@ -14,8 +14,10 @@ import { FixturesProvider } from '../src/providers/fixtures.provider.js';
  * connected: a real endpoint answers, an unimplemented one fails in the documented shape,
  * validation rejects before reaching a service, and an unknown path 404s.
  *
- * Resolve and the browse endpoints have since been implemented and have their own suites; the
- * 501 assertion here now covers `popular`, which genuinely is still a stub.
+ * Every endpoint in docs/backend-api.md is now implemented, so there is no longer a route that
+ * answers 501 — the `not_implemented` path exists in `ERROR_CODES` for a future endpoint that
+ * is wired before its service is written, and asserting it here would need a fake route built
+ * only to be asserted. The 400 and 404 cases below still prove the error contract end to end.
  */
 function buildApp(): express.Express {
   return createApp({
@@ -39,16 +41,6 @@ describe('GET /api/health', () => {
 });
 
 describe('error contract', () => {
-  it('returns ApiError for an endpoint that is not built yet', async () => {
-    const response = await request(buildApp()).get('/api/booking-codes/popular');
-
-    expect(response.status).toBe(501);
-    expect(response.body).toMatchObject({
-      error: 'not_implemented',
-      message: expect.any(String),
-    });
-  });
-
   it('rejects a malformed body with a field-level 400', async () => {
     const response = await request(buildApp()).post('/api/booking-codes').send({});
 

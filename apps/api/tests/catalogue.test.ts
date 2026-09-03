@@ -138,6 +138,9 @@ describe('GET /api/events', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toBe('invalid_request');
+    // Rendered to a user verbatim, so it has to read as a sentence rather than as Zod's
+    // "Too big: expected number to be <=50".
+    expect(response.body.message).not.toContain('expected number');
   });
 });
 

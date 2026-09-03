@@ -20,6 +20,7 @@ import { BetwayProvider } from '../src/providers/betway.provider.js';
 const BASE_URL = 'https://www.betway.com.ng/appsynapse/bet-api-sr';
 const CONFIG_URL = 'https://config.betwayafrica.com';
 const FEEDS_URL = 'https://feeds-roa2.betwayafrica.com/br/_apis/sport/v1';
+const APIC_URL = 'https://apic.betwayafrica.com';
 const CODE = 'BW6E487423';
 
 const validBody: unknown = JSON.parse(
@@ -54,6 +55,7 @@ beforeEach(() => {
     base: BASE_URL,
     config: CONFIG_URL,
     feeds: FEEDS_URL,
+    apic: APIC_URL,
   });
 });
 

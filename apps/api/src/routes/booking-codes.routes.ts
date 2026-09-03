@@ -1,10 +1,11 @@
 import { Router } from 'express';
 
 import type { BookingCodesController } from '../controllers/booking-codes.controller.js';
-import { validateBody } from '../middleware/validate.js';
+import { validateBody, validateQuery } from '../middleware/validate.js';
 import {
   convertBodySchema,
   createBodySchema,
+  popularQuerySchema,
   resolveBodySchema,
 } from '../schemas/booking-codes.schema.js';
 
@@ -23,7 +24,7 @@ export function bookingCodeRoutes(controller: BookingCodesController): Router {
 
   router.post('/resolve', validateBody(resolveBodySchema), controller.resolve);
   router.post('/convert', validateBody(convertBodySchema), controller.convert);
-  router.get('/popular', controller.popular);
+  router.get('/popular', validateQuery(popularQuerySchema), controller.popular);
   router.post('/', validateBody(createBodySchema), controller.create);
 
   return router;

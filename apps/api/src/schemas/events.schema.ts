@@ -10,7 +10,12 @@ import { z } from 'zod';
  */
 export const eventsQuerySchema = z.object({
   sport: z.string().trim().min(1).max(32, 'sport must be 32 characters or fewer.').default('soccer'),
-  take: z.coerce.number().int().min(1).max(50).default(20),
+  take: z.coerce
+    .number({ error: 'take must be a number.' })
+    .int('take must be a whole number.')
+    .min(1, 'Ask for at least one event.')
+    .max(50, 'You can ask for at most 50 events at a time.')
+    .default(20),
 });
 
 export type EventsQuery = z.infer<typeof eventsQuerySchema>;

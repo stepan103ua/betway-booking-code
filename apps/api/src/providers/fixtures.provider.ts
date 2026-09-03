@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { Fixture, Market, PopularBookingCode, Slip, Sport } from '@booking-code/contracts';
+import type { Fixture, Market, Slip, Sport } from '@booking-code/contracts';
 
 import { AppError } from '../lib/errors.js';
 
-import type { BookingCodeProvider } from './booking-code-provider.js';
+import type { BookingCodeProvider, CatalogueCode } from './booking-code-provider.js';
 import {
   parseBetBookUpcoming,
   parseConfigSports,
@@ -16,7 +16,12 @@ import {
   toMarkets,
   toSports,
 } from './betway.catalogue.mapper.js';
-import { parseFindBookABet, toSlip } from './betway.mapper.js';
+import {
+  parseFindBookABet,
+  parseWidgetBookingCodes,
+  toCatalogueCodes,
+  toSlip,
+} from './betway.mapper.js';
 
 /**
  * The offline implementation: the same DTOs, read from committed JSON.
@@ -33,7 +38,6 @@ import { parseFindBookABet, toSlip } from './betway.mapper.js';
  * an offline demo should follow. Other sports and events answer empty rather than pretending,
  * which is also what Betway does for a sport with no fixtures.
  *
- * Still a stub: popular codes.
  */
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '../../fixtures');
@@ -98,8 +102,16 @@ export class FixturesProvider implements BookingCodeProvider {
     return bookingCode;
   }
 
-  async popularCodes(_limit: number): Promise<PopularBookingCode[]> {
-    throw AppError.notImplemented('Fixtures popular codes');
+  /**
+   * The captured catalogue, truncated to `limit`.
+   *
+   * Every code in it resolves offline to the sample slip, because `resolve` answers any code it
+   * does not recognise with that capture. That is what makes the service's fan-out testable
+   * without a network — a test that wants a decode to fail spies on `resolve` instead.
+   */
+  async popularCodes(limit: number): Promise<CatalogueCode[]> {
+    const rows = toCatalogueCodes(parseWidgetBookingCodes(this.load('widget-booking-codes')));
+    return rows.slice(0, limit);
   }
 
   async sports(): Promise<Sport[]> {

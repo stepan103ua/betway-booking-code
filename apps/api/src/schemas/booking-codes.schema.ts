@@ -69,3 +69,22 @@ export const convertBodySchema = z.object({
 export type ResolveBody = z.infer<typeof resolveBodySchema>;
 export type CreateBody = z.infer<typeof createBodySchema>;
 export type ConvertBody = z.infer<typeof convertBodySchema>;
+
+/**
+ * `GET /api/booking-codes/popular`.
+ *
+ * `limit` is capped harder than the other list endpoints because it drives a **fan-out**: the
+ * catalogue carries no odds, so every code costs one decode to enrich (docs/betway-api.md §5).
+ * Twenty codes is twenty-one upstream calls and roughly seven hundred selections on the wire;
+ * six is what the Decode empty state actually shows.
+ */
+export const popularQuerySchema = z.object({
+  limit: z.coerce
+    .number({ error: 'limit must be a number.' })
+    .int('limit must be a whole number.')
+    .min(1, 'Ask for at least one code.')
+    .max(20, 'You can ask for at most 20 codes at a time.')
+    .default(6),
+});
+
+export type PopularQuery = z.infer<typeof popularQuerySchema>;
