@@ -49,6 +49,29 @@ export function validatedQuery<T>(res: Response): T {
   return res.locals.query as T;
 }
 
+/**
+ * Path params. Worth validating even though Express already matched the route: a param goes
+ * straight into an upstream URL, and this endpoint must not be a wider door than Betway's.
+ */
+export function validateParams<T>(schema: ZodType<T>): RequestHandler {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const result = schema.safeParse(req.params);
+
+    if (!result.success) {
+      next(new AppError('invalid_request', formatIssues(result.error.issues)));
+      return;
+    }
+
+    res.locals.params = result.data;
+    next();
+  };
+}
+
+/** Reads the value put there by `validateParams`. */
+export function validatedParams<T>(res: Response): T {
+  return res.locals.params as T;
+}
+
 type Issue = { path: PropertyKey[]; message: string };
 
 function formatIssues(issues: readonly Issue[]): string {

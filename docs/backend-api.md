@@ -47,7 +47,14 @@ type Fixture = {
   name: string;
   league: string;
   kickoffAt: string;
-  market1x2: { outcomeId: string; label: 'Home' | 'Draw' | 'Away'; odds: number }[];
+  markets: Market[];
+};
+
+type Market = {
+  marketId: string;
+  name: string;   // display-ready and fully qualified: "1X2", "Total (6.5)"
+  type: string;   // stable machine key: "win-draw-win". Not unique within an event
+  outcomes: { outcomeId: string; label: string; odds: number }[];
 };
 
 // Convert's response: a Slip, plus what changed relative to the code it started from.
@@ -62,6 +69,12 @@ type ApiError = {
   message: string;    // human-readable, safe to show in the UI
 };
 ```
+
+A market is a list entry rather than a `market1x2` key: the market's name is data, not
+schema, and upstream can return the same market type twice for one event (two Totals on
+different lines) which a keyed object could not represent. `outcomes` is ordered as upstream
+ranks it — for `win-draw-win` that is home, draw, away, which is where a 1/X/2 picker gets its
+column order, since no outcome carries the word "Home" itself.
 
 `ApiError` is the one shape every non-2xx response uses, from every endpoint — Zod validation
 failures, upstream Betway errors, and internal errors alike. No endpoint below returns a
@@ -244,10 +257,17 @@ endpoint to fan out into an unbounded number of upstream calls.
       "name": "Liverpool FC (Alexander) vs. Real Madrid (Lucas)",
       "league": "eAdriatic League",
       "kickoffAt": "2026-09-02T20:00:00Z",
-      "market1x2": [
-        { "outcomeId": "7423294011", "label": "Home", "odds": 2.27 },
-        { "outcomeId": "7423294012", "label": "Draw", "odds": 3.90 },
-        { "outcomeId": "7423294013", "label": "Away", "odds": 2.43 }
+      "markets": [
+        {
+          "marketId": "742329401",
+          "name": "1X2",
+          "type": "win-draw-win",
+          "outcomes": [
+            { "outcomeId": "7423294011", "label": "Liverpool FC (Alexander)", "odds": 2.27 },
+            { "outcomeId": "7423294012", "label": "Draw", "odds": 3.90 },
+            { "outcomeId": "7423294013", "label": "Real Madrid (Lucas)", "odds": 2.43 }
+          ]
+        }
       ]
     }
   ]
@@ -256,14 +276,51 @@ endpoint to fan out into an unbounded number of upstream calls.
 
 Upstream: `GET feeds-roa2.betwayafrica.com/.../BetBook/Upcoming/?...&marketTypes=[Win/Draw/Win]`.
 The 1X2 market comes back inline, which is all the Create picker needs — no second call per
-event. Cache: Redis, TTL 30–60s (odds move).
+event, so `markets` here always holds exactly one entry. Cache: Redis, TTL 30s (odds move).
 
-### `GET /api/events/:eventId/markets` — designed, not built for v1
+An unknown sport is **not** an error: upstream answers with an empty page, so this returns
+`200 { "events": [] }`. That is deliberate — a real sport can genuinely have no upcoming
+fixtures (`athletics`, `cycling` and `lacrosse` all did when this was verified), so an empty
+list has to be a valid answer here. `GET /api/events/:eventId/markets` treats the same
+emptiness as a `404`, because an event with nothing priced on it is not an event a client can
+do anything with.
 
-Full market list beyond 1X2 (Totals, Handicap, Double Chance…), wrapping
-`MarketGroupings/group-names` + `MarketGroupNamesAndMarketsForEvent`. Not needed while Create
-is scoped to a single market; documented here so the seam is visible and the cut is explicit
-rather than accidental.
+### `GET /api/events/:eventId/markets`
+
+The full market list for one event — Totals, Handicap, Double Chance and the rest — for a
+picker that has grown past 1X2.
+
+**Response `200`** — `{ eventId: string, markets: Market[] }`, the same `Market` the endpoint
+above returns.
+
+```json
+{
+  "eventId": "74263200",
+  "markets": [
+    {
+      "marketId": "7426320018total=6.5~",
+      "name": "Total (6.5)",
+      "type": "handicap-goals-over",
+      "outcomes": [
+        { "outcomeId": "7426320018total=6.5~12", "label": "Over", "odds": 1.93 },
+        { "outcomeId": "7426320018total=6.5~13", "label": "Under", "odds": 1.69 }
+      ]
+    }
+  ]
+}
+```
+
+**Response `404`** — `ApiError`, when the event is unknown or has no priced markets.
+
+```json
+{ "error": "not_found", "message": "No markets found for this event." }
+```
+
+Upstream: `GET .../MarketGroupings/MarketGroupNamesAndMarketsForEvent?marketGroupId=Main`.
+Only the `Main` group, which is one call and already carries 1X2, Double Chance, Draw No Bet,
+Total and Handicap. The other groups (`Goals`, `Totals`, `Winner`, `Handicap`, `Build A Bet`,
+from `MarketGroupings/group-names`) would cost one upstream call each and mostly duplicate
+`Main`; fetching them is an additive change if a client ever needs them. Cache: Redis, TTL 30s.
 
 ---
 

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 
-import { validatedQuery } from '../middleware/validate.js';
-import type { EventsQuery } from '../schemas/events.schema.js';
+import { validatedParams, validatedQuery } from '../middleware/validate.js';
+import type { EventParams, EventsQuery } from '../schemas/events.schema.js';
 import type { CatalogueService } from '../services/catalogue.service.js';
 
 /** TODO: see the note in `booking-codes.controller.ts` — same rules apply. */
@@ -15,5 +15,10 @@ export class CatalogueController {
   events = async (_req: Request, res: Response): Promise<void> => {
     const { sport, take } = validatedQuery<EventsQuery>(res);
     res.json({ events: await this.service.events(sport, take) });
+  };
+
+  eventMarkets = async (_req: Request, res: Response): Promise<void> => {
+    const { eventId } = validatedParams<EventParams>(res);
+    res.json({ eventId, markets: await this.service.eventMarkets(eventId) });
   };
 }

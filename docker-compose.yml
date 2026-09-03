@@ -25,7 +25,10 @@ services:
       # `redis`, not localhost: inside the compose network the service name is the hostname.
       # This is the one value that cannot be copied from apps/api/.env.
       REDIS_URL: redis://redis:6379
+      # Three Betway hosts, not one — betting API, reference data, odds feed (docs/betway-api.md §1).
       BETWAY_BASE_URL: ${BETWAY_BASE_URL:-https://www.betway.com.ng/appsynapse/bet-api-sr}
+      BETWAY_CONFIG_URL: ${BETWAY_CONFIG_URL:-https://config.betwayafrica.com}
+      BETWAY_FEEDS_URL: ${BETWAY_FEEDS_URL:-https://feeds-roa2.betwayafrica.com/br/_apis/sport/v1}
       ALLOWED_ORIGIN: ${ALLOWED_ORIGIN:-http://localhost:3001}
       PORT: 3000
     depends_on:

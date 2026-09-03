@@ -18,6 +18,8 @@ import { BetwayProvider } from '../src/providers/betway.provider.js';
  */
 
 const BASE_URL = 'https://www.betway.com.ng/appsynapse/bet-api-sr';
+const CONFIG_URL = 'https://config.betwayafrica.com';
+const FEEDS_URL = 'https://feeds-roa2.betwayafrica.com/br/_apis/sport/v1';
 const CODE = 'BW6E487423';
 
 const validBody: unknown = JSON.parse(
@@ -48,7 +50,11 @@ let provider: BetwayProvider;
 beforeEach(() => {
   fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
-  provider = new BetwayProvider(BASE_URL);
+  provider = new BetwayProvider({
+    base: BASE_URL,
+    config: CONFIG_URL,
+    feeds: FEEDS_URL,
+  });
 });
 
 afterEach(() => {
@@ -96,6 +102,61 @@ describe('request shape', () => {
     await provider.resolve(CODE);
 
     expect(fetchMock.mock.calls[0]![0]).toContain('betway.com.ng');
+  });
+});
+
+describe('browse request shapes', () => {
+  it('reads the sport list from the config host, not the betting API', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ sports: [] }));
+
+    await provider.sports();
+
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe(`${CONFIG_URL}/cron/sports/NG/en-US`);
+    expect(init.method).toBe('GET');
+  });
+
+  it('asks the feed for one market type, which is what keeps it to a single call', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ events: [], markets: [], outcomes: [], prices: [] }),
+    );
+
+    await provider.upcomingEvents('soccer', 20);
+
+    const url = new URL(fetchMock.mock.calls[0]![0] as string);
+    expect(url.origin + url.pathname).toBe(`${FEEDS_URL}/BetBook/Upcoming/`);
+    expect(url.searchParams.get('sportId')).toBe('soccer');
+    expect(url.searchParams.get('Take')).toBe('20');
+    // Scopes which markets come back with each event; it does not filter which events appear.
+    expect(url.searchParams.get('marketTypes')).toBe('[Win/Draw/Win]');
+  });
+
+  it('requests only the Main market group', async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ marketsInGroup: [], outcomes: [], prices: [] }),
+    );
+
+    await provider.eventMarkets('74263200');
+
+    const url = new URL(fetchMock.mock.calls[0]![0] as string);
+    expect(url.pathname).toContain('MarketGroupNamesAndMarketsForEvent');
+    expect(url.searchParams.get('eventId')).toBe('74263200');
+    expect(url.searchParams.get('marketGroupId')).toBe('Main');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('times out a hung browse call like any other', async () => {
+    fetchMock.mockRejectedValueOnce(new DOMException('timed out', 'TimeoutError'));
+
+    expect((await captureError(provider.sports())).code).toBe('upstream_timeout');
+  });
+
+  it('does not retry a browse call — only decode has the documented flake', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ oops: true }, 400));
+
+    await captureError(provider.sports());
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 

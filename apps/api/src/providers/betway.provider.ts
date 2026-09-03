@@ -1,9 +1,17 @@
-import type { Fixture, PopularBookingCode, Slip, Sport } from '@booking-code/contracts';
+import type { Fixture, Market, PopularBookingCode, Slip, Sport } from '@booking-code/contracts';
 
 import { AppError } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 
 import type { BookingCodeProvider } from './booking-code-provider.js';
+import {
+  parseBetBookUpcoming,
+  parseConfigSports,
+  parseMarketGroup,
+  toFixtures,
+  toMarkets,
+  toSports,
+} from './betway.catalogue.mapper.js';
 import { parseFindBookABet, toSlip } from './betway.mapper.js';
 
 /**
@@ -13,7 +21,7 @@ import { parseFindBookABet, toSlip } from './betway.mapper.js';
  * Anonymous throughout: no auth, no signature, no captcha, no cookies. Cloudflare guards
  * Betway's HTML, not its API, so a plain server-side `fetch` is sufficient (§8).
  *
- * Still stubs: encode, popular codes, sports, events.
+ * Still stubs: encode and popular codes.
  */
 
 /**
@@ -27,10 +35,33 @@ const REQUEST_TIMEOUT_MS = 5_000;
 
 const FIND_BOOK_A_BET_PATH = '/v2/Betting/FindBookABet';
 
+/**
+ * Betway serves this product from three hosts (docs/betway-api.md §7). Grouping them keeps
+ * the composition root honest about that rather than hiding two of them in constants here.
+ */
+export type BetwayHosts = {
+  /** Betting API — decode and encode. */
+  base: string;
+  /** Reference data — the sport list. */
+  config: string;
+  /** Odds feed — event lists and market groups. */
+  feeds: string;
+};
+
+/**
+ * Only the `Main` group. It already carries 1X2, Double Chance, Draw No Bet, Total and
+ * Handicap — the list `docs/backend-api.md` §2 asks this endpoint for — in a single call.
+ * The other five groups from `MarketGroupings/group-names` would cost one call each.
+ */
+const MARKET_GROUP_ID = 'Main';
+
+/** Generous headroom: `Main` held 7 markets on the event this was verified against. */
+const MARKET_GROUP_TAKE = 50;
+
 export class BetwayProvider implements BookingCodeProvider {
   private lastSuccess: string | null = null;
 
-  constructor(private readonly baseUrl: string) {}
+  constructor(private readonly hosts: BetwayHosts) {}
 
   /**
    * Decode a booking code (docs/betway-api.md §2).
@@ -51,12 +82,49 @@ export class BetwayProvider implements BookingCodeProvider {
     throw AppError.notImplemented('Betway popular codes');
   }
 
+  /** Reference list of sports (docs/betway-api.md §4.1). */
   async sports(): Promise<Sport[]> {
-    throw AppError.notImplemented('Betway sports');
+    const body = await this.getJson(`${this.hosts.config}/cron/sports/NG/en-US`);
+    return toSports(parseConfigSports(body));
   }
 
-  async upcomingEvents(_sportId: string, _take: number): Promise<Fixture[]> {
-    throw AppError.notImplemented('Betway upcoming events');
+  /**
+   * Upcoming fixtures with the 1X2 market inline (docs/betway-api.md §4.3).
+   *
+   * `marketTypes` scopes which markets come back *with* each event; it does not filter which
+   * events appear. Asking for one market is what keeps this to a single upstream call.
+   */
+  async upcomingEvents(sportId: string, take: number): Promise<Fixture[]> {
+    const query = new URLSearchParams({
+      countryCode: 'NG',
+      sportId,
+      Skip: '0',
+      Take: String(take),
+      cultureCode: 'en-US',
+      isEsport: 'false',
+      boostedOnly: 'false',
+      marketTypes: '[Win/Draw/Win]',
+    });
+
+    const body = await this.getJson(`${this.hosts.feeds}/BetBook/Upcoming/?${query}`);
+    return toFixtures(parseBetBookUpcoming(body));
+  }
+
+  /** Every market for one event (docs/betway-api.md §4.4). */
+  async eventMarkets(eventId: string): Promise<Market[]> {
+    const query = new URLSearchParams({
+      eventId,
+      marketGroupId: MARKET_GROUP_ID,
+      countryCode: 'NG',
+      cultureCode: 'en-US',
+      skip: '0',
+      take: String(MARKET_GROUP_TAKE),
+      isBuildABetOnly: 'false',
+      searchQuery: '',
+    });
+
+    const url = `${this.hosts.feeds}/MarketGroupings/MarketGroupNamesAndMarketsForEvent?${query}`;
+    return toMarkets(parseMarketGroup(await this.getJson(url)));
   }
 
   lastSuccessAt(): string | null {
@@ -75,13 +143,13 @@ export class BetwayProvider implements BookingCodeProvider {
   private async findBookABet(code: string): Promise<unknown> {
     const payload = { countryCode: 'NG', bookingCode: code, cultureCode: 'en-US' };
 
-    const first = await this.postJson(FIND_BOOK_A_BET_PATH, payload);
+    const first = await this.postJson(`${this.hosts.base}${FIND_BOOK_A_BET_PATH}`, payload);
     if (first.status !== 400) return this.readBody(first);
 
     await discard(first);
     logger.warn('FindBookABet returned 400, retrying once', { code });
 
-    const retry = await this.postJson(FIND_BOOK_A_BET_PATH, payload);
+    const retry = await this.postJson(`${this.hosts.base}${FIND_BOOK_A_BET_PATH}`, payload);
 
     // Still 400 after a retry: the code really is unknown. Upstream's own error body
     // (`BookABetInvalidCode`, errorCode 6000331) is deliberately not forwarded.
@@ -93,12 +161,23 @@ export class BetwayProvider implements BookingCodeProvider {
     return this.readBody(retry);
   }
 
-  private async postJson(path: string, body: unknown): Promise<Response> {
+  /** GET + read, for the browse endpoints. They have no retry: none of them 400 spuriously. */
+  private async getJson(url: string): Promise<unknown> {
+    return this.readBody(await this.send(url, { method: 'GET' }));
+  }
+
+  private async postJson(url: string, body: unknown): Promise<Response> {
+    return this.send(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  }
+
+  private async send(url: string, init: RequestInit): Promise<Response> {
     try {
-      return await fetch(`${this.baseUrl}${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+      return await fetch(url, {
+        ...init,
         // Without this a hung connection holds the request open until the platform kills it,
         // which is how a slow upstream becomes an outage here.
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),

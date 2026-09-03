@@ -44,20 +44,51 @@ export type Slip = {
   selections: Selection[];
 };
 
-/** An upcoming event with its 1X2 market inline — everything the Create picker needs. */
+/** An upcoming event with its markets inline — everything the Create picker needs. */
 export type Fixture = {
   eventId: string;
   name: string;
   league: string;
   /** ISO 8601. */
   kickoffAt: string;
-  market1x2: Market1x2Outcome[];
+  /**
+   * `GET /api/events` fills this with the 1X2 market only; `GET /api/events/:eventId/markets`
+   * returns the full set. A list rather than a `market1x2` key because a market's name is
+   * data, not schema — and because upstream can return the same market type twice for one
+   * event (two Totals on different lines), which a keyed object could not represent.
+   */
+  markets: Market[];
 };
 
-export type Market1x2Outcome = {
+export type Market = {
+  marketId: string;
+  /** Fully qualified and ready to display: `"1X2"`, `"Total (6.5)"`. */
+  name: string;
+  /**
+   * Stable machine key — branch on this, never on `name` or on the numeric part of an id.
+   * `"win-draw-win"`, `"double-chance"`, `"handicap-goals-over"`. Not unique within an event:
+   * two Totals on different lines share a type and differ by `name` and `marketId`.
+   */
+  type: string;
+  /**
+   * Ordered as upstream ranks them. For `win-draw-win` that is home, draw, away — which is
+   * where a 1/X/2 picker gets its column order, since no outcome says "Home" itself.
+   */
+  outcomes: MarketOutcome[];
+};
+
+export type MarketOutcome = {
   outcomeId: string;
-  label: 'Home' | 'Draw' | 'Away';
+  /** What upstream calls this outcome: a team name, `"Draw"`, `"Over"`. */
+  label: string;
+  /** Decimal odds. */
   odds: number;
+};
+
+/** The full market list for one event. */
+export type EventMarkets = {
+  eventId: string;
+  markets: Market[];
 };
 
 /**
