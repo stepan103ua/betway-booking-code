@@ -1,63 +1,97 @@
-import type { Selection, Slip } from '@booking-code/contracts';
-import { Badge } from '@/components/ui/badge';
+'use client';
+
+import { type ReactNode, useState } from 'react';
+import type { Selection } from '@booking-code/contracts';
+import { SelectionRow } from '@/components/selection-row';
+import { type SlipStatus, SlipHeader } from '@/components/slip-header';
+import { Alert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
-import { DEAD_LEG_REASON, formatKickoff, formatOdds, formatUsage, slipStatus } from '@/lib/format';
+import { slipStatus } from '@/lib/format';
 
 /**
- * The product's central object (design-system.md §5). Takes the real `Slip` / `Selection`
- * DTOs — no parallel view-model — and is used unchanged for Decode's result, Create's recap
- * and Convert's before/after. Composition only: layout and formatting, over the
- * `components/ui/` primitives. This is the basic version — no expander, no footer actions.
+ * The product's central object (design-system.md §5) — header, an optional partial-slip
+ * notice, the selection list on a `surfaceRow` band, a "Show N more" expander, and an
+ * optional footer. Takes the real `Selection` DTOs; used unchanged by Decode, Create's recap
+ * and Convert's before/after.
  */
-export function SlipCard({ slip }: { slip: Slip }) {
-  const status = slipStatus(slip.selections);
+export function SlipCard({
+  code,
+  totalOdds,
+  selections,
+  status,
+  expiresAt,
+  usageCount,
+  notice,
+  onCopy,
+  footer,
+  collapsedCount,
+}: {
+  code: string;
+  totalOdds: number;
+  selections: Selection[];
+  status?: SlipStatus;
+  expiresAt?: string | null;
+  usageCount?: number | null;
+  /** Overrides the built-in "N of M are no longer available" notice; pass `null` to suppress. */
+  notice?: ReactNode;
+  onCopy?: () => void;
+  footer?: ReactNode;
+  collapsedCount?: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const dead = selections.filter((s) => !s.isActive).length;
+  const resolved = status ?? slipStatus(selections);
+  const shown =
+    collapsedCount != null && !expanded ? selections.slice(0, collapsedCount) : selections;
+  const hidden = selections.length - shown.length;
 
   return (
     <Card padding="none" className="overflow-hidden">
-      <header className="flex flex-wrap items-start justify-between gap-4 p-4">
-        <div>
-          <p className="type-label text-text-muted">Booking code</p>
-          <p className="type-code-hero mt-1 text-text-primary">{slip.bookingCode}</p>
-        </div>
-        <div className="text-right">
-          <p className="type-label text-text-muted">Total odds</p>
-          <p className="type-odds-hero mt-1 text-odds-text">{formatOdds(slip.totalOdds)}</p>
-        </div>
-      </header>
+      <SlipHeader
+        code={code}
+        totalOdds={totalOdds}
+        selectionCount={selections.length}
+        status={resolved}
+        expiresAt={expiresAt}
+        usageCount={usageCount}
+        onCopy={onCopy}
+      />
 
-      <div className="flex flex-wrap gap-2 px-4 pb-3">
-        <Badge tone={status === 'live' ? 'accent' : 'warn'}>
-          {status === 'live' ? 'Active' : 'Some legs dead'}
-        </Badge>
-        <Badge>{slip.selections.length} selections</Badge>
-        {slip.usageCount !== null && <Badge>{formatUsage(slip.usageCount)}</Badge>}
-      </div>
+      {notice !== undefined
+        ? notice && <div className="px-[14px] pb-[14px]">{notice}</div>
+        : resolved === 'partial' &&
+          dead > 0 && (
+            <div className="px-[14px] pb-[14px]">
+              <Alert
+                tone="warn"
+                title={`${dead} of ${selections.length} selections are no longer available`}
+              >
+                The rest of the slip still loads. Remove the dead legs in Convert to get a fresh
+                code.
+              </Alert>
+            </div>
+          )}
 
       <ul className="bg-surface-row">
-        {slip.selections.map((selection) => (
-          <SelectionRow key={selection.outcomeId} selection={selection} />
+        {shown.map((selection, i) => (
+          <SelectionRow key={selection.outcomeId} selection={selection} index={i + 1} />
         ))}
       </ul>
-    </Card>
-  );
-}
 
-function SelectionRow({ selection }: { selection: Selection }) {
-  const dead = !selection.isActive;
-  return (
-    <li className="border-t border-border-subtle px-[14px] py-3 first:border-t-0" data-dead={dead}>
-      <p className={`type-body-strong text-text-primary ${dead ? 'line-through opacity-70' : ''}`}>
-        {selection.eventName}
-      </p>
-      <p className="mt-1 flex flex-wrap items-center gap-2 text-text-secondary">
-        <Badge tone="neutral">{selection.marketName}</Badge>
-        <span className="type-body">{selection.outcomeName.trim()}</span>
-        <span className="type-odds text-odds-text">{formatOdds(selection.odds)}</span>
-      </p>
-      <p className="type-meta mt-1 text-text-muted">
-        {selection.league} · {formatKickoff(selection.kickoffAt)}
-      </p>
-      {dead && <p className="type-meta mt-1 text-danger-text">{DEAD_LEG_REASON}</p>}
-    </li>
+      {hidden > 0 && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="type-body-strong h-11 w-full border-t border-border-subtle bg-surface-row text-[13px] text-text-secondary hover:text-text-primary"
+        >
+          Show {hidden} more {hidden === 1 ? 'selection' : 'selections'}
+        </button>
+      )}
+
+      {footer && (
+        <div className="border-t border-border-subtle bg-surface-card p-[14px]">{footer}</div>
+      )}
+    </Card>
   );
 }

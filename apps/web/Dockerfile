@@ -23,7 +23,11 @@ COPY package.json package-lock.json ./
 COPY apps/web/package.json apps/web/
 COPY packages/contracts/package.json packages/contracts/
 
-RUN npm ci
+# --workspace scopes the install to web + contracts — without it npm ci resolves every
+# workspace's tree (api's express/ioredis/vitest too). --mount=type=cache keeps the package
+# tarballs across builds, so a rebuild after a lockfile bump is seconds, not a minute.
+RUN --mount=type=cache,target=/root/.npm \
+  npm ci --workspace @booking-code/web --no-audit --fund=false --prefer-offline
 
 
 # ---- build ----------------------------------------------------------------------------------

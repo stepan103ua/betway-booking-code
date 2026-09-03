@@ -40,7 +40,7 @@ point where interactivity actually starts.
 
 | Screen | Server Component | Client Component |
 |---|---|---|
-| Decode (`/`) | Initial `popular codes` fetch, rendered in the HTML on first load | Code input, submit, resolved slip display |
+| Decode (`/` and `/<code>`) | `popular codes` fetch; **the decode itself** — `/<code>` resolves the slip server-side so the URL is a shareable link | Code input, the paste/copy/share controls, the popular-list "load more" |
 | Create (`/create`) | Initial `sports` + `events` fetch | Outcome picker, selection tray, live total-odds recalculation |
 | Convert (`/convert`) | — (arrives with a code from Decode, or a fresh input) | Checkbox list, before/after diff, recompute on every toggle |
 
@@ -48,6 +48,14 @@ The rule of thumb: **fetch on the server, mutate on the client.** A page never s
 bundle just to make its first read — that read happens in a Server Component and is already
 in the HTML. Anything the user clicks, types, or toggles is a Client Component, because that's
 what the label is for.
+
+**Decode resolves by navigation, not by Server Action.** §3 sketches `resolveCode` as a
+`useActionState` action; the built version instead puts the code on the URL (`/<code>`, one
+optional-catch-all route) and resolves it in that Server Component. The trade: a decoded slip
+is now a link you can share, at the cost of the form's no-JS fallback. Submitting, picking a
+popular code, and "decode another" are all `router.push`. `loadPopular` stays a Server Action
+(a paged read the client triggers). Create and Convert keep the `useActionState` shape — they
+are true mutations with nothing to put on a URL.
 
 ---
 
@@ -151,17 +159,20 @@ surfaces at the web app's build, not at runtime in front of a reviewer.
 
 ```
 app/
-  layout.tsx           theme, fonts, shell (header/footer)
-  page.tsx              Decode (default route)
+  layout.tsx            theme, fonts, shell (header/footer)
+  [[...code]]/page.tsx  Decode — serves `/` (empty) and `/<code>` (resolved slip)
   create/page.tsx
   convert/page.tsx
-  actions.ts            Server Actions — the only place fetch() calls the API for writes
-  error.tsx              route-level error boundary
+  actions.ts            Server Actions — currently just loadPopular (paged read)
+  error.tsx             route-level error boundary
+  not-found.tsx         branded 404
 components/
-  slip-card.tsx          shared across all three screens
-  decode-form.tsx, create-picker.tsx, convert-list.tsx
+  slip-card.tsx         shared across all three screens (+ slip-header, selection-row, …)
+  decode-screen.tsx, create-picker.tsx, convert-list.tsx
+  ui/                   restyled shadcn-style primitives (§1)
 lib/
-  api.ts                 thin fetch wrapper: base URL, JSON headers, error unwrapping
+  api.ts                thin fetch wrapper: base URL, JSON headers, error unwrapping
+  resolve.ts            server-side decode → a UI-ready result union (used by the route)
 ```
 
 No `middleware.ts` / `proxy.ts` — nothing here needs request interception (no auth, no

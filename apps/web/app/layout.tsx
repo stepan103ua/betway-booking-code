@@ -17,11 +17,22 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // No `data-theme` — dark is the unstyled default (design-system.md §1).
+  // No `data-theme` — dark is the unstyled default (design-system.md §1). The mode switch
+  // (Decode / Create / Convert — design-system.md §4) lands with the other two screens.
   return (
     <html lang="en">
       <body className={`${archivo.variable} ${jetbrainsMono.variable}`}>
-        <div className="mx-auto min-h-dvh max-w-[1120px] px-4 py-8 sm:px-8">{children}</div>
+        <div className="mx-auto min-h-dvh w-full max-w-[680px] px-4 py-6 sm:px-6 sm:py-10">
+          <header className="mb-6 flex items-center gap-2">
+            <span className="type-code grid size-[26px] place-items-center rounded-tile bg-accent-solid text-[12px] font-bold text-text-on-accent">
+              BC
+            </span>
+            <span className="type-h2 tracking-[-0.03em] text-text-primary">
+              booking<span className="text-text-muted">code</span>
+            </span>
+          </header>
+          {children}
+        </div>
       </body>
     </html>
   );

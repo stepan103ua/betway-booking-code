@@ -1,40 +1,24 @@
 'use server';
 
-import type { Slip } from '@booking-code/contracts';
-import { ApiRequestError, apiFetch } from '@/lib/api';
+import type { PopularPage } from '@booking-code/contracts';
+import { apiFetch } from '@/lib/api';
+import { POPULAR_PAGE } from '@/lib/popular';
 
 /**
- * Server Actions — the only place `fetch` calls the API for a write (docs/frontend.md §5).
- * Decode, Create and Convert are all "submit something, get a slip back", so each is a form
- * driven by `useActionState`; this is Decode's action.
+ * One more page of popular codes. A read triggered by a client interaction ("Load more") —
+ * neither a plain Server Component read nor a mutation, so it goes through a Server Action:
+ * it keeps `API_URL` server-side and the fan-out cost (docs/backend-api.md §1) off the
+ * browser. `null` on failure — the list degrades to a quiet line, same as the first page.
+ *
+ * The decode itself is not an action — it's a navigation to `/<code>`, resolved server-side
+ * by that route (`lib/resolve.ts`), which is what makes a decoded slip a shareable link.
  */
-
-export type ResolveState = { slip?: Slip; error?: string };
-
-/** Matches the API's `CodeInput` gate (design-system.md §4) — check it before the round trip. */
-const CODE_PATTERN = /^BW[0-9A-F]{8}$/;
-
-export async function resolveCode(_prev: ResolveState, formData: FormData): Promise<ResolveState> {
-  const code = String(formData.get('code') ?? '')
-    .trim()
-    .toUpperCase();
-
-  if (!CODE_PATTERN.test(code)) {
-    return {
-      error: 'Codes are BW followed by 8 characters (0-9, A-F). Check for an O typed as a 0.',
-    };
-  }
-
+export async function loadPopular(skip: number): Promise<PopularPage | null> {
   try {
-    const slip = await apiFetch<Slip>('/api/booking-codes/resolve', {
-      method: 'POST',
-      body: JSON.stringify({ code }),
-    });
-    return { slip };
-  } catch (err) {
-    // An invalid or unknown code is an expected outcome of this app, not an exception — it
-    // is rendered as UI state, never thrown to the error boundary (docs/frontend.md §6).
-    if (err instanceof ApiRequestError) return { error: err.message };
-    return { error: 'Could not reach the service. Try again in a moment.' };
+    return await apiFetch<PopularPage>(
+      `/api/booking-codes/popular?limit=${POPULAR_PAGE}&skip=${skip}`,
+    );
+  } catch {
+    return null;
   }
 }
