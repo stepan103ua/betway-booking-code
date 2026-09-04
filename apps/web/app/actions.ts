@@ -2,6 +2,7 @@
 
 import type { EventsPage, PopularPage } from '@booking-code/contracts';
 import { apiFetch } from '@/lib/api';
+import { type ConvertActionResult, convertCode } from '@/lib/convert';
 import {
   type CreateResult,
   type MarketsResult,
@@ -44,4 +45,12 @@ export async function loadEventMarkets(eventId: string): Promise<MarketsResult> 
 /** Generate a booking code from a draft — `POST /api/booking-codes` (a write). */
 export async function generateCode(outcomeIds: string[]): Promise<CreateResult> {
   return createCode(outcomeIds);
+}
+
+/** Reissue a code without the dropped legs — `POST /api/booking-codes/convert` (a write). */
+export async function convert(
+  code: string,
+  dropOutcomeIds: string[],
+): Promise<ConvertActionResult> {
+  return convertCode(code, dropOutcomeIds);
 }
