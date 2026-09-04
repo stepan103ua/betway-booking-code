@@ -1,6 +1,7 @@
 import type { Selection } from '@booking-code/contracts';
 import { Ban, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/cn';
 import { DEAD_LEG_REASON, formatKickoff, formatOdds } from '@/lib/format';
 
 /**
@@ -12,16 +13,21 @@ export function SelectionRow({
   selection,
   index,
   onRemove,
+  className,
 }: {
   selection: Selection;
   index?: number;
   onRemove?: () => void;
+  className?: string;
 }) {
   const dead = !selection.isActive;
 
   return (
     <li
-      className="flex gap-3 border-t border-border-subtle px-[14px] py-3 first:border-t-0 data-[dead=true]:bg-state-stale-surface data-[dead=true]:opacity-70"
+      className={cn(
+        'flex gap-3 border-t border-border-subtle px-[14px] py-3 first:border-t-0 data-[dead=true]:bg-state-stale-surface data-[dead=true]:opacity-70',
+        className,
+      )}
       data-dead={dead}
     >
       {index !== undefined && (

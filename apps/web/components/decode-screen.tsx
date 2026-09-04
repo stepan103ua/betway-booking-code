@@ -187,7 +187,7 @@ export function DecodeScreen({
   const showEmptyIntro = !rendered;
 
   return (
-    <div className="flex flex-col gap-4 pb-6">
+    <div className="flex animate-rise flex-col gap-4 pb-6">
       <form onSubmit={submit}>
         <CodeInput
           inputRef={inputRef}

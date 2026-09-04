@@ -15,7 +15,7 @@ export default async function ConvertPage({
   const { code } = await searchParams;
 
   return (
-    <main className="flex flex-col gap-4">
+    <main className="flex animate-rise flex-col gap-4">
       <h1 className="type-h1 text-text-primary">Convert</h1>
       <DashedBorder className="flex flex-col items-center gap-3 px-6 py-9 text-center">
         <p className="type-h3 text-text-primary">Not built yet</p>

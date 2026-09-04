@@ -1,18 +1,26 @@
 'use server';
 
-import type { PopularPage } from '@booking-code/contracts';
+import type { EventsPage, PopularPage } from '@booking-code/contracts';
 import { apiFetch } from '@/lib/api';
+import {
+  type CreateResult,
+  type MarketsResult,
+  createCode,
+  getEventMarkets,
+  getEventsPage,
+} from '@/lib/create';
 import { POPULAR_PAGE } from '@/lib/popular';
 
 /**
- * One more page of popular codes. A read triggered by a client interaction ("Load more") —
- * neither a plain Server Component read nor a mutation, so it goes through a Server Action:
- * it keeps `API_URL` server-side and the fan-out cost (docs/backend-api.md §1) off the
- * browser. `null` on failure — the list degrades to a quiet line, same as the first page.
+ * Client-triggered reads and the one write. Each keeps `API_URL` server-side and the fan-out
+ * cost (docs/backend-api.md) off the browser. The Server-Component reads — first popular
+ * page, first fixture page, sports — happen in the route files, not here.
  *
- * The decode itself is not an action — it's a navigation to `/<code>`, resolved server-side
- * by that route (`lib/resolve.ts`), which is what makes a decoded slip a shareable link.
+ * Decode is not here: a decode is a navigation to `/<code>` (`lib/resolve.ts`), which is what
+ * makes a decoded slip a shareable link.
  */
+
+/** One more page of popular codes ("Load more" on Decode). `null` on failure. */
 export async function loadPopular(skip: number): Promise<PopularPage | null> {
   try {
     return await apiFetch<PopularPage>(
@@ -21,4 +29,19 @@ export async function loadPopular(skip: number): Promise<PopularPage | null> {
   } catch {
     return null;
   }
+}
+
+/** A page of fixtures for Create — the first is server-rendered, the rest come through here. */
+export async function loadEvents(sport: string, skip: number): Promise<EventsPage | null> {
+  return getEventsPage(sport, skip);
+}
+
+/** The full market list for one event — the "more markets" sheet fetches it on open. */
+export async function loadEventMarkets(eventId: string): Promise<MarketsResult> {
+  return getEventMarkets(eventId);
+}
+
+/** Generate a booking code from a draft — `POST /api/booking-codes` (a write). */
+export async function generateCode(outcomeIds: string[]): Promise<CreateResult> {
+  return createCode(outcomeIds);
 }
