@@ -160,6 +160,17 @@ describe('totalOdds', () => {
     expect(slip.totalOdds).toBe(9);
   });
 
+  it('totals the 2dp odds each client shows, not the raw price', () => {
+    // Raw 1.234 * 1.234 = 1.522756 -> 1.52, but both legs render as "1.23" on the card and
+    // 1.23 * 1.23 = 1.5129 -> 1.51. The badge has to match the numbers next to it.
+    const slip = slipFrom(
+      rawSelection({ priceDecimal: 1.234 }),
+      rawSelection({ priceDecimal: 1.234 }),
+    );
+
+    expect(slip.totalOdds).toBe(1.51);
+  });
+
   it('rounds away float noise', () => {
     // 1.26 * 1.1 * 2 is 2.7720000000000002 in IEEE 754.
     const slip = slipFrom(
