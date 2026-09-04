@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../../../core/di.dart';
 import '../../../../core/failure.dart';
 import '../../../../design/tokens/app_colors.dart';
 import '../../../../design/tokens/app_typography.dart';
 import '../../../../design/widgets/app_alert.dart';
 import '../../../../design/widgets/app_button.dart';
 import '../../../../design/widgets/app_card.dart';
+import '../../../../design/widgets/app_expandable.dart';
+import '../../../../design/widgets/app_reveal.dart';
 import '../../../../design/widgets/app_skeleton.dart';
 import '../../../../widgets/slip/empty_state.dart';
 import '../cubit/create_cubit.dart';
 import '../cubit/create_state.dart';
 import '../cubit/events_cubit.dart';
 import '../cubit/events_state.dart';
+import '../model/draft_pick.dart';
 import '../widgets/created_code_view.dart';
-import '../widgets/draft_tray.dart';
 import '../widgets/event_tile.dart';
 import '../widgets/market_picker_sheet.dart';
 import '../widgets/sport_selector.dart';
@@ -27,25 +28,12 @@ import '../widgets/sport_selector.dart';
 ///
 /// Three cubits: [CreateCubit] (sports + draft + generate), [EventsCubit]
 /// (the paginated fixture list), and a per-sheet `EventMarketsCubit`. The
-/// fixture list is reloaded whenever the selected sport changes, via the
-/// [BlocListener] below — the one place the two screen-level cubits touch.
-class CreateScreen extends StatelessWidget {
-  const CreateScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider(create: (_) => getIt<CreateCubit>()..load()),
-        BlocProvider(create: (_) => getIt<EventsCubit>()),
-      ],
-      child: const _CreateView(),
-    );
-  }
-}
-
-class _CreateView extends StatelessWidget {
-  const _CreateView();
+/// [CreateCubit] / [EventsCubit] providers are created by `AppShell` so the
+/// floating `DraftBar` in its overlay shares them; this widget is just the
+/// scrolling content. The fixture list reloads whenever the selected sport
+/// changes, via the [BlocListener] below.
+class CreateView extends StatelessWidget {
+  const CreateView({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -59,14 +47,28 @@ class _CreateView extends StatelessWidget {
         context.read<EventsCubit>().load(state.selectedSport.id);
       },
       child: BlocBuilder<CreateCubit, CreateState>(
-        builder: (context, state) => switch (state) {
-          CreateLoadingSports() => const _PickerSkeleton(),
-          CreateSportsError(:final failure) => _SportsError(failure: failure),
-          CreateReady() when state.createdCode != null => CreatedCodeView(
-            state: state,
-            onStartOver: () => context.read<CreateCubit>().startOver(),
-          ),
-          CreateReady() => _Picker(state: state),
+        builder: (context, state) {
+          final (String phaseKey, Widget child) = switch (state) {
+            CreateLoadingSports() => ('loading', const _PickerSkeleton()),
+            CreateSportsError(:final failure) => (
+              'error',
+              _SportsError(failure: failure),
+            ),
+            CreateReady() when state.createdCode != null => (
+              'created-${state.createdCode}',
+              CreatedCodeView(
+                state: state,
+                onStartOver: () => context.read<CreateCubit>().startOver(),
+              ),
+            ),
+            // Sport id in the key so switching sport replays the reveal — the
+            // web keys this subtree on the sport the same way.
+            CreateReady() => (
+              'picker-${state.selectedSport.id}',
+              _Picker(state: state),
+            ),
+          };
+          return AppReveal(key: ValueKey(phaseKey), child: child);
         },
       ),
     );
@@ -79,31 +81,25 @@ class _SportsError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.only(top: 8, bottom: 20),
-      children: [
-        AppAlert(
-          tone: AppAlertTone.danger,
-          title: "Couldn't start Create",
-          body: failure.message,
-          action: AppButton(
-            label: 'Try again',
-            variant: AppButtonVariant.secondary,
-            size: AppButtonSize.sm,
-            icon: 'rotate-ccw',
-            onPressed: () => context.read<CreateCubit>().load(),
-          ),
-        ),
-      ],
+    return AppAlert(
+      tone: AppAlertTone.danger,
+      title: "Couldn't start Create",
+      body: failure.message,
+      action: AppButton(
+        label: 'Try again',
+        variant: AppButtonVariant.secondary,
+        size: AppButtonSize.sm,
+        icon: 'rotate-ccw',
+        onPressed: () => context.read<CreateCubit>().load(),
+      ),
     );
   }
 }
 
-/// The whole picker is one [CustomScrollView] rather than a `ListView` with a
-/// `Column` of tiles inside it: the fixture list grows a page at a time via
-/// "load more" and is genuinely unbounded, so its tiles build lazily as a
-/// `SliverList.builder`. A chip tap still rebuilds this subtree (the draft
-/// changed), but now only the tiles actually on screen rebuild with it.
+/// The picker is a plain `Column` — `AppShell` owns the one page scroll, so
+/// nothing here scrolls on its own. The fixture list grows a page at a time
+/// via "load more"; its rows build eagerly (the web renders the whole list
+/// too, and a user only ever pulls in a handful of pages).
 class _Picker extends StatelessWidget {
   const _Picker({required this.state});
   final CreateReady state;
@@ -111,71 +107,65 @@ class _Picker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final createCubit = context.read<CreateCubit>();
-    final selectedOutcomeIds = {for (final p in state.picks) p.outcomeId};
-    final pickedEventIds = {for (final p in state.picks) p.eventId};
+    final picksByEvent = {for (final p in state.picks) p.eventId: p};
     final colors = context.colors;
 
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 4),
-              SportSelector(
-                sports: state.sports,
-                selectedId: state.selectedSport.id,
-                onSelect: createCubit.selectSport,
-              ),
-              const SizedBox(height: 16),
-              if (state.picks.isEmpty)
-                const EmptyState(
-                  icon: 'wand-sparkles',
-                  title: 'Build a slip',
-                  body:
-                      'Tap the odds on any fixture below to add a leg. Open '
-                      '"More markets" for totals, handicaps and the rest.',
-                )
-              else
-                DraftTray(
-                  state: state,
-                  onRemove: createCubit.toggleOutcome,
-                  onClear: createCubit.clearDraft,
-                  onGenerate: createCubit.generate,
-                  onRefreshEvents: () =>
-                      context.read<EventsCubit>().load(state.selectedSport.id),
-                ),
-              const SizedBox(height: 20),
-              Text(
-                'UPCOMING',
-                style: AppTypography.label.copyWith(color: colors.textMuted),
-              ),
-              const SizedBox(height: 10),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 4),
+        SportSelector(
+          sports: state.sports,
+          selectedId: state.selectedSport.id,
+          onSelect: createCubit.selectSport,
+        ),
+        // The "how to build a slip" hint collapses away once there's a leg —
+        // the running slip lives in the floating `DraftBar` from then on, not
+        // in a card here, so the fixture list never reflows on a pick.
+        AppExpandable(
+          expanded: state.picks.isEmpty,
+          child: const Padding(
+            padding: EdgeInsets.only(top: 16),
+            child: EmptyState(
+              icon: 'wand-sparkles',
+              title: 'Build a slip',
+              body:
+                  'Tap the odds on any fixture below to add a leg. Open '
+                  '"More markets" for totals, handicaps and the rest.',
+            ),
           ),
         ),
-        _EventsSliver(
-          selectedOutcomeIds: selectedOutcomeIds,
-          pickedEventIds: pickedEventIds,
+        const SizedBox(height: 20),
+        Text(
+          'UPCOMING',
+          style: AppTypography.label.copyWith(color: colors.textMuted),
+        ),
+        const SizedBox(height: 10),
+        _EventsList(
+          picksByEvent: picksByEvent,
           draftFull: state.isFull,
           sportName: state.selectedSport.name,
         ),
-        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+        // Clearance for the floating `DraftBar` so "load more" / the last
+        // fixture stay reachable above it.
+        AppExpandable(
+          expanded: state.picks.isNotEmpty,
+          child: const SizedBox(height: 76),
+        ),
       ],
     );
   }
 }
 
-class _EventsSliver extends StatelessWidget {
-  const _EventsSliver({
-    required this.selectedOutcomeIds,
-    required this.pickedEventIds,
+class _EventsList extends StatelessWidget {
+  const _EventsList({
+    required this.picksByEvent,
     required this.draftFull,
     required this.sportName,
   });
 
-  final Set<String> selectedOutcomeIds;
-  final Set<String> pickedEventIds;
+  final Map<String, DraftPick> picksByEvent;
   final bool draftFull;
   final String sportName;
 
@@ -184,33 +174,26 @@ class _EventsSliver extends StatelessWidget {
     final colors = context.colors;
     return BlocBuilder<EventsCubit, EventsState>(
       builder: (context, state) => switch (state) {
-        EventsLoading() => const SliverToBoxAdapter(
-          child: _EventListSkeleton(),
-        ),
-        EventsError(:final failure) => SliverToBoxAdapter(
-          child: AppAlert(
-            tone: AppAlertTone.danger,
-            title: "Couldn't load fixtures",
-            body: failure.message,
-            action: AppButton(
-              label: 'Try again',
-              variant: AppButtonVariant.secondary,
-              size: AppButtonSize.sm,
-              icon: 'rotate-ccw',
-              onPressed: () => _reload(context),
-            ),
+        EventsLoading() => const _EventListSkeleton(),
+        EventsError(:final failure) => AppAlert(
+          tone: AppAlertTone.danger,
+          title: "Couldn't load fixtures",
+          body: failure.message,
+          action: AppButton(
+            label: 'Try again',
+            variant: AppButtonVariant.secondary,
+            size: AppButtonSize.sm,
+            icon: 'rotate-ccw',
+            onPressed: () => _reload(context),
           ),
         ),
-        EventsLoaded(:final events) when events.isEmpty => SliverToBoxAdapter(
-          child: Text(
-            'No upcoming $sportName fixtures right now.',
-            style: AppTypography.meta.copyWith(color: colors.textMuted),
-          ),
+        EventsLoaded(:final events) when events.isEmpty => Text(
+          'No upcoming $sportName fixtures right now.',
+          style: AppTypography.meta.copyWith(color: colors.textMuted),
         ),
-        EventsLoaded() => _EventListSliver(
+        EventsLoaded() => _EventListColumn(
           state: state,
-          selectedOutcomeIds: selectedOutcomeIds,
-          pickedEventIds: pickedEventIds,
+          picksByEvent: picksByEvent,
           draftFull: draftFull,
         ),
       },
@@ -225,43 +208,42 @@ class _EventsSliver extends StatelessWidget {
   }
 }
 
-class _EventListSliver extends StatelessWidget {
-  const _EventListSliver({
+class _EventListColumn extends StatelessWidget {
+  const _EventListColumn({
     required this.state,
-    required this.selectedOutcomeIds,
-    required this.pickedEventIds,
+    required this.picksByEvent,
     required this.draftFull,
   });
 
   final EventsLoaded state;
-  final Set<String> selectedOutcomeIds;
-  final Set<String> pickedEventIds;
+  final Map<String, DraftPick> picksByEvent;
   final bool draftFull;
 
   @override
   Widget build(BuildContext context) {
     final createCubit = context.read<CreateCubit>();
-    final events = state.events;
-    // One extra row for the "load more" footer when there is another page.
-    final itemCount = events.length + (state.hasMore ? 1 : 0);
 
-    return SliverList.builder(
-      itemCount: itemCount,
-      itemBuilder: (context, i) {
-        if (i == events.length) return _LoadMore(state: state);
-        final event = events[i];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: EventTile(
-            event: event,
-            selectedOutcomeIds: selectedOutcomeIds,
-            draftFull: draftFull,
-            eventHasPick: pickedEventIds.contains(event.eventId),
-            onToggle: createCubit.toggleOutcome,
-            onMoreMarkets: () => openMarketPickerSheet(context, event),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final event in state.events)
+          AppReveal(
+            // Keyed by event so a "load more" only animates the appended tiles.
+            key: ValueKey(event.eventId),
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: EventTile(
+                event: event,
+                pick: picksByEvent[event.eventId],
+                draftFull: draftFull,
+                onToggle: createCubit.toggleOutcome,
+                onMoreMarkets: () => openMarketPickerSheet(context, event),
+              ),
+            ),
           ),
-        );
-      },
+        if (state.hasMore) _LoadMore(state: state),
+      ],
     );
   }
 }
@@ -309,10 +291,15 @@ class _PickerSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.only(top: 8, bottom: 20),
-      children: const [
-        AppSkeleton(width: 48, height: 10),
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: AppSkeleton(width: 48, height: 10),
+        ),
         SizedBox(height: 10),
         Row(
           children: [

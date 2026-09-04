@@ -4,6 +4,7 @@ import '../../../../design/tokens/app_colors.dart';
 import '../../../../design/tokens/app_motion.dart';
 import '../../../../design/tokens/app_radius.dart';
 import '../../../../design/tokens/app_typography.dart';
+import '../../../../design/widgets/app_reveal.dart';
 import '../../../../models/sport.dart';
 
 /// Horizontal row of sport chips. Upstream lists only `soccer` today, so this
@@ -69,7 +70,7 @@ class _SportChip extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      child: GestureDetector(
+      child: PressScale(
         onTap: onTap,
         child: AnimatedContainer(
           duration: AppMotion.fast,

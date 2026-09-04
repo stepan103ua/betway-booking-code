@@ -9,36 +9,37 @@ import '../../../../widgets/slip/slip_format.dart';
 import '../model/draft_pick.dart';
 import 'outcome_chip.dart';
 
-/// One fixture in the browse list: name, league and kickoff, the inline 1X2
-/// market as three tappable chips, and a way into the full market sheet.
+/// One fixture in the browse list: name, league and kickoff, a market row, and
+/// a way into the full market sheet.
 ///
-/// `GET /api/events` always returns exactly the 1X2 market inline
-/// (`docs/backend-api.md` §2), so `event.markets.first` is safe here — but the
-/// guard covers a feed that ever changes that.
+/// `GET /api/events` returns exactly the 1X2 market inline
+/// (`docs/backend-api.md` §2). When this event's draft leg is on that market,
+/// the 1X2 row shows it selected. When the leg was picked from "More markets"
+/// (a total, a handicap), the inline row can't represent it — so the tile
+/// shows that pick as its own chip instead, and the list always reflects
+/// what's in the slip.
 class EventTile extends StatelessWidget {
   const EventTile({
     super.key,
     required this.event,
-    required this.selectedOutcomeIds,
+    required this.pick,
     required this.onToggle,
     required this.onMoreMarkets,
     required this.draftFull,
-    required this.eventHasPick,
   });
 
   final Fixture event;
-  final Set<String> selectedOutcomeIds;
+
+  /// This event's leg in the draft, or `null`. A booking code can't hold two
+  /// selections on one event (`docs/betway-api.md` §3), so there is at most one.
+  final DraftPick? pick;
+
   final ValueChanged<DraftPick> onToggle;
   final VoidCallback onMoreMarkets;
 
   /// Draft is at the 20-leg cap — unselected chips go disabled so the limit is
   /// visible rather than a silently ignored tap.
   final bool draftFull;
-
-  /// This match already has a leg in the draft. A booking code can't hold two
-  /// selections on one event, so every other outcome here goes disabled until
-  /// that leg is removed (`docs/betway-api.md` §3).
-  final bool eventHasPick;
 
   @override
   Widget build(BuildContext context) {
@@ -52,6 +53,12 @@ class EventTile extends StatelessWidget {
         market.type == 'win-draw-win' &&
         market.outcomes.length == 3;
     const wdwLabels = ['1', 'X', '2'];
+
+    final pickOnInline =
+        pick != null &&
+        market != null &&
+        market.outcomes.any((o) => o.outcomeId == pick!.outcomeId);
+    final pickElsewhere = pick != null && !pickOnInline;
 
     return AppCard(
       padding: AppCardPadding.md,
@@ -72,7 +79,21 @@ class EventTile extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: AppTypography.meta.copyWith(color: colors.textMuted),
           ),
-          if (market != null) ...[
+          if (pickElsewhere) ...[
+            const SizedBox(height: 12),
+            Text(
+              pick!.marketName,
+              style: AppTypography.meta.copyWith(color: colors.textMuted),
+            ),
+            const SizedBox(height: 6),
+            OutcomeChip(
+              label: pick!.outcomeLabel,
+              odds: pick!.odds,
+              selected: true,
+              expand: true,
+              onTap: () => onToggle(pick!),
+            ),
+          ] else if (market != null) ...[
             const SizedBox(height: 12),
             Row(
               children: [
@@ -82,10 +103,8 @@ class EventTile extends StatelessWidget {
                     child: OutcomeChip(
                       label: isWdw ? wdwLabels[i] : market.outcomes[i].label,
                       odds: market.outcomes[i].odds,
-                      selected: selectedOutcomeIds.contains(
-                        market.outcomes[i].outcomeId,
-                      ),
-                      disabled: draftFull || eventHasPick,
+                      selected: pick?.outcomeId == market.outcomes[i].outcomeId,
+                      disabled: draftFull || pick != null,
                       expand: true,
                       onTap: () => onToggle(
                         DraftPick.from(
@@ -100,7 +119,7 @@ class EventTile extends StatelessWidget {
               ],
             ),
           ],
-          if (eventHasPick) ...[
+          if (pickOnInline) ...[
             const SizedBox(height: 8),
             Text(
               'One pick per match — remove it in your slip to choose another.',

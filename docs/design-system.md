@@ -176,13 +176,21 @@ corners only.
 |---|---|---|
 | `instant` | 80ms | — |
 | `fast` | 120ms | button/card/input press, chevrons, toggles — almost everything |
-| `base` | 180ms | — |
+| `pop` | 140ms | a value snapping in — a check mark, a selected chip's tick (scale 0.6 → 1) |
+| `base` | 180ms | inline height reveal (a tile expanding) |
+| `rise` | 220ms | a content block mounting — fade + 6px up. Replayed by a key change on a result phase, an appended list row, a changed odds figure |
 | `slow` | 240ms | — |
 | `sheet` | 280ms | bottom-sheet entrance |
 | `skeleton` | 1400ms | skeleton opacity pulse (0.55 ↔ 1) |
 
 Curves: `easeOut` = `cubic(0.2, 0.8, 0.2, 1)` (default), `easeInOut` = `cubic(0.4, 0, 0.2, 1)`
 (skeleton only).
+
+`rise` and `pop` are one entrance vocabulary shared by both clients — Flutter's `AppReveal` /
+`AppPop` (`lib/design/widgets/app_reveal.dart`) and the web's `--animate-rise` /
+`--animate-pop`. A vertical expand/collapse is `AppExpandable` (`base`, a `SizeTransition`)
+against the web's `grid-template-rows` 0fr↔1fr. All collapse to a plain passthrough under the
+platform reduce-motion switch (`MediaQuery.disableAnimations` / `prefers-reduced-motion`).
 
 ### Iconography
 

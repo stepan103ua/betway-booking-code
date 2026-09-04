@@ -95,4 +95,6 @@ odds figure; `animate-pop` on a check mark; `active:scale` press on buttons and 
 `grid-rows` 0fr→1fr expand on the popular tiles; `@starting-style` enter/exit on the modal.
 All disabled under `prefers-reduced-motion`.
 
-Not built: click-a-popular-tile-to-auto-submit differences from `apps/mobile`, noted inline.
+`apps/mobile` now matches this screen's flow — same pagination on the popular list, same
+entrance/pop motion, popular codes kept on screen next to a resolved slip, and a popular
+tile resolves the code rather than only filling the field.
