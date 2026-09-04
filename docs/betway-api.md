@@ -138,6 +138,12 @@ home & draw), confirming decode ⇄ encode share one consistent model. Odds had 
 between create and decode (2.27 → 2.17) — expected, since prices are live; not a bug, but
 worth surfacing in the UI ("odds shown may differ from the moment the code was created").
 
+Betway's own betslip prints a **total** that can sit ~0.01 off the product of the leg odds it
+displays right beside it (observed: legs 5.60 and 2.60, total 14.55, not 14.56). Betway totals
+a full-precision live snapshot and rounds each leg for display separately; the snapshot it
+totals is not the one it shows. We cannot reproduce that number and should not try — we total
+the 2dp odds we display, so our badge always equals the card (`apps/api/src/lib/odds.ts`).
+
 Anonymous, `apiVersion: v1` (not v2 like FindBookABet). No cap found on `outcomes.length`
 during testing.
 

@@ -139,8 +139,10 @@ it lists; joining against it would add an upstream call to every decode to popul
 stay null for most codes. Decode reports what decode can know.
 
 `totalOdds` is computed by us as the product of every leg — upstream sends no total — and
-includes inactive legs, because they are part of what the code contains. Convert recomputes
-over the legs it keeps, which is what `previousTotalOdds` is there to compare against.
+includes inactive legs, because they are part of what the code contains. Each leg is rounded to
+2dp before multiplying, so the total equals the product of the odds shown on the card; Betway's
+own betslip total can still differ by a cent (`betway-api.md` §3). Convert recomputes over the
+legs it keeps, which is what `previousTotalOdds` is there to compare against.
 
 Cache: Redis, key `resolve:{code}`, TTL 30s — the conservative end of the 30–60s this design
 allows, since odds visibly move within seconds (`betway-api.md` §3). The code is uppercased
