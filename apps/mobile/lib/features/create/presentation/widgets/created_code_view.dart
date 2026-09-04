@@ -75,8 +75,9 @@ class _CreatedCodeViewState extends State<CreatedCodeView> {
         .map((p) => p.toSelection())
         .toList(growable: false);
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 20),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 4),
         Text(

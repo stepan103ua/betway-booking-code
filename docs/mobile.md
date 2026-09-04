@@ -51,7 +51,8 @@ lib/
           booking_code_repository.dart             abstract interface
       presentation/
         cubit/
-          slip_cubit.dart / popular_codes_cubit.dart
+          slip_cubit.dart            resolve on submit
+          popular_codes_cubit.dart   the "try a code" list, its own load / load-more
         pages/
           decode_screen.dart
     create/                          same four layers as decode/
@@ -64,9 +65,14 @@ lib/
           event_markets_cubit.dart   markets for one event, scoped to the sheet
         model/
           draft_pick.dart            UI-only leg shape — see §3
-        pages/create_screen.dart
-        widgets/                     sport_selector, event_tile, market_picker_sheet,
-                                     draft_tray, created_code_view, outcome_chip
+        pages/create_screen.dart     `CreateView` — the scrolling content only
+        widgets/                     sport_selector, outcome_chip,
+                                     market_picker_sheet, created_code_view,
+                                     event_tile (shows the event's draft leg —
+                                       even one picked from "More markets"),
+                                     draft_bar (floating island: summary opens
+                                       the sheet, Generate acts direct) +
+                                     draft_sheet (the full slip)
     convert/                         same four layers as decode/
       data/{datasources,repositories}/   resolve, then convert
       domain/repositories/
@@ -74,6 +80,11 @@ lib/
         cubit/convert_cubit.dart     loaded slip + drop set + convert
         pages/convert_screen.dart
         widgets/                     convert_leg_row (keep/drop toggle), convert_result_view
+  shell/app_shell.dart               wordmark + mode tabs + the active screen in one page
+                                     scroll (the web's model); Create adds a floating
+                                     `DraftBar` in an overlay above that scroll, and
+                                     owns the scroll controller so generating a code
+                                     jumps back to the top where the recap lands
   design/                            tokens + core widget kit — implements docs/design-system.md §2–§4
   widgets/slip/                      slip anatomy (SelectionRow, SlipCard, …) — docs/design-system.md §5–§6
   models/

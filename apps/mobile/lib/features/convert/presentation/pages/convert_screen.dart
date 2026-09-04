@@ -10,6 +10,7 @@ import '../../../../design/tokens/app_typography.dart';
 import '../../../../design/widgets/app_alert.dart';
 import '../../../../design/widgets/app_button.dart';
 import '../../../../design/widgets/app_card.dart';
+import '../../../../design/widgets/app_reveal.dart';
 import '../../../../widgets/slip/code_input.dart';
 import '../../../../widgets/slip/slip_skeleton.dart';
 import '../cubit/convert_cubit.dart';
@@ -89,20 +90,35 @@ class _ConvertViewState extends State<_ConvertView> {
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<ConvertCubit, ConvertState>(
-      builder: (context, state) => switch (state) {
-        ConvertInitial(:final codeError) => _InputView(
-          controller: _controller,
-          codeError: codeError,
-          onLoad: _load,
-          onPaste: _paste,
-          onClear: _startOver,
-        ),
-        ConvertResolving() => _ResolvingView(controller: _controller),
-        ConvertReady() when state.result != null => ConvertResultView(
-          result: state.result!,
-          onConvertAnother: _startOver,
-        ),
-        ConvertReady() => _PickerView(state: state, onChangeCode: _startOver),
+      builder: (context, state) {
+        final (String phaseKey, Widget child) = switch (state) {
+          ConvertInitial(:final codeError) => (
+            'input',
+            _InputView(
+              controller: _controller,
+              codeError: codeError,
+              onLoad: _load,
+              onPaste: _paste,
+              onClear: _startOver,
+            ),
+          ),
+          ConvertResolving() => (
+            'resolving',
+            _ResolvingView(controller: _controller),
+          ),
+          ConvertReady() when state.result != null => (
+            'result-${state.result!.bookingCode}',
+            ConvertResultView(
+              result: state.result!,
+              onConvertAnother: _startOver,
+            ),
+          ),
+          ConvertReady() => (
+            'picker',
+            _PickerView(state: state, onChangeCode: _startOver),
+          ),
+        };
+        return AppReveal(key: ValueKey(phaseKey), child: child);
       },
     );
   }
@@ -128,8 +144,9 @@ class _InputView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final invalid = codeError is InvalidCodeFailure;
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 20),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
         CodeInput(
           controller: controller,
@@ -174,8 +191,9 @@ class _ResolvingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 20),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
         CodeInput(
           controller: controller,
@@ -206,8 +224,9 @@ class _PickerView extends StatelessWidget {
     final selections = state.original.selections;
     final error = state.convertError;
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 24),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 4),
         _CodeHeader(code: state.original.bookingCode, onChange: onChangeCode),
@@ -227,12 +246,15 @@ class _PickerView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               for (final s in selections)
-                ConvertLegRow(
-                  selection: s,
-                  dropped: !s.isActive || state.isDropped(s.outcomeId),
-                  onToggle: s.isActive
-                      ? () => cubit.toggleDrop(s.outcomeId)
-                      : null,
+                AppReveal(
+                  key: ValueKey(s.outcomeId),
+                  child: ConvertLegRow(
+                    selection: s,
+                    dropped: !s.isActive || state.isDropped(s.outcomeId),
+                    onToggle: s.isActive
+                        ? () => cubit.toggleDrop(s.outcomeId)
+                        : null,
+                  ),
                 ),
             ],
           ),
@@ -346,6 +368,8 @@ class _DiffSummary extends StatelessWidget {
                 legs: kept,
                 approximate: true,
                 muted: !state.canConvert,
+                // Pulses whenever a drop changes the preview total.
+                replayKey: '${state.previewOdds}:$kept',
               ),
             ],
           ),
@@ -374,6 +398,7 @@ class _OddsBlock extends StatelessWidget {
     required this.legs,
     this.approximate = false,
     this.muted = false,
+    this.replayKey,
   });
 
   final String label;
@@ -382,9 +407,19 @@ class _OddsBlock extends StatelessWidget {
   final bool approximate;
   final bool muted;
 
+  /// When set, the odds figure fades-and-rises on every change of this value.
+  final String? replayKey;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final oddsText = Text(
+      '${approximate ? '≈ ' : ''}${odds.toStringAsFixed(2)}',
+      style: AppTypography.odds.copyWith(
+        fontSize: 18,
+        color: muted ? colors.textDisabled : colors.oddsText,
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -394,13 +429,9 @@ class _OddsBlock extends StatelessWidget {
           style: AppTypography.label.copyWith(color: colors.textMuted),
         ),
         const SizedBox(height: 4),
-        Text(
-          '${approximate ? '≈ ' : ''}${odds.toStringAsFixed(2)}',
-          style: AppTypography.odds.copyWith(
-            fontSize: 18,
-            color: muted ? colors.textDisabled : colors.oddsText,
-          ),
-        ),
+        replayKey == null
+            ? oddsText
+            : AppReveal(key: ValueKey(replayKey), child: oddsText),
         const SizedBox(height: 2),
         Text(
           '$legs ${legs == 1 ? 'leg' : 'legs'}',

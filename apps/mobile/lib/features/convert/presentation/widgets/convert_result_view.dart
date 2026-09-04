@@ -69,8 +69,9 @@ class _ConvertResultViewState extends State<ConvertResultView> {
     final legWord = r.selections.length == 1 ? 'leg' : 'legs';
     final droppedWord = r.droppedCount == 1 ? 'leg' : 'legs';
 
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 20),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
       children: [
         const SizedBox(height: 4),
         Text(

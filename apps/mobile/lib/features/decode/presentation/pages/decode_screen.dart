@@ -15,6 +15,8 @@ import '../../../../design/widgets/app_badge.dart';
 import '../../../../design/widgets/app_bottom_sheet.dart';
 import '../../../../design/widgets/app_button.dart';
 import '../../../../design/widgets/app_card.dart';
+import '../../../../design/widgets/app_expandable.dart';
+import '../../../../design/widgets/app_reveal.dart';
 import '../../../../design/widgets/app_skeleton.dart';
 import '../../../../design/widgets/dashed_border.dart';
 import '../../../../models/slip.dart';
@@ -137,29 +139,6 @@ class _DecodeViewState extends State<_DecodeView> {
           _ShareCodeRow(code: code, odds: odds),
           const SizedBox(height: 10),
           AppButton(
-            label: 'WhatsApp',
-            variant: AppButtonVariant.secondary,
-            icon: 'message-circle',
-            fullWidth: true,
-            onPressed: () => _launch(
-              Uri.parse('https://wa.me/?text=${Uri.encodeComponent(text)}'),
-            ),
-          ),
-          const SizedBox(height: 10),
-          AppButton(
-            label: 'Telegram',
-            variant: AppButtonVariant.secondary,
-            icon: 'send',
-            fullWidth: true,
-            onPressed: () => _launch(
-              Uri.parse(
-                'https://t.me/share/url?url=${Uri.encodeComponent(_betwayUrl)}'
-                '&text=${Uri.encodeComponent(text)}',
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          AppButton(
             label: 'Copy code and odds',
             variant: AppButtonVariant.secondary,
             icon: 'copy',
@@ -178,12 +157,38 @@ class _DecodeViewState extends State<_DecodeView> {
     );
   }
 
+  /// Fill the input and resolve in one step — a popular tile is a shortcut to
+  /// a decode, the same as clicking one on the web (which navigates to
+  /// `/<code>`). The list itself stays put: it is a separate Cubit from the
+  /// slip, so resolving doesn't reload it.
+  void _useCode(String code) {
+    _controller.text = code.toUpperCase();
+    context.read<SlipCubit>().resolve(code);
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<SlipCubit, SlipState>(
       builder: (context, state) {
-        return ListView(
-          padding: const EdgeInsets.only(bottom: 20),
+        final slip = state is SlipLoaded ? state.slip : null;
+        final (String phaseKey, List<Widget> phase) = switch (state) {
+          SlipInitial() => ('initial', _buildInitial(context)),
+          SlipLoading() => ('loading', const <Widget>[SlipSkeleton(rows: 5)]),
+          SlipLoaded(:final slip) => (
+            'loaded-${slip.bookingCode}',
+            _buildLoaded(context, slip),
+          ),
+          SlipError(:final failure) => (
+            'error-${failure.runtimeType}',
+            _buildError(context, failure),
+          ),
+        };
+
+        // A plain column — `AppShell` owns the one page scroll (see its
+        // build). Same for Create and Convert.
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
             CodeInput(
               controller: _controller,
@@ -195,12 +200,24 @@ class _DecodeViewState extends State<_DecodeView> {
               onSubmit: _decode,
             ),
             const SizedBox(height: 16),
-            ...switch (state) {
-              SlipInitial() => _buildInitial(context),
-              SlipLoading() => const [SlipSkeleton(rows: 5)],
-              SlipLoaded(:final slip) => _buildLoaded(context, slip),
-              SlipError(:final failure) => _buildError(context, failure),
-            },
+            // A `key` bump replays the fade-and-rise as the phase changes —
+            // the web keys its result region the same way.
+            AppReveal(
+              key: ValueKey(phaseKey),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: phase,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Always on screen — a resolved slip still shows "Try another
+            // code" so there's a way back to browsing without clearing first.
+            _PopularCodes(
+              heading: slip != null ? 'Try another code' : 'Popular codes',
+              excludeCode: slip?.bookingCode,
+              onUse: _useCode,
+            ),
           ],
         );
       },
@@ -208,16 +225,14 @@ class _DecodeViewState extends State<_DecodeView> {
   }
 
   List<Widget> _buildInitial(BuildContext context) {
-    return [
-      const AppAlert(
+    return const <Widget>[
+      AppAlert(
         tone: AppAlertTone.info,
         icon: 'info',
         title: 'Paste any Betway booking code',
         body:
             "You'll see every selection, the market, the odds and whether the slip is still live — before you stake anything.",
       ),
-      const SizedBox(height: 16),
-      _PopularCodes(onUse: (c) => setState(() => _controller.text = c)),
     ];
   }
 
@@ -370,14 +385,31 @@ class _DecodeViewState extends State<_DecodeView> {
 /// thing the user came to do, so it degrades to nothing rather than an
 /// alert competing with the actual decode flow above it.
 class _PopularCodes extends StatelessWidget {
-  const _PopularCodes({required this.onUse});
+  const _PopularCodes({
+    required this.onUse,
+    this.heading = 'Popular codes',
+    this.excludeCode,
+  });
+
   final ValueChanged<String> onUse;
+  final String heading;
+
+  /// The slip currently on screen — kept out of the list so it never shows a
+  /// duplicate of what's above it.
+  final String? excludeCode;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     return BlocBuilder<PopularCodesCubit, PopularCodesState>(
       builder: (context, state) {
+        final loaded = state is PopularCodesLoaded ? state : null;
+        final shown = loaded == null
+            ? const <Slip>[]
+            : loaded.codes
+                  .where((c) => c.bookingCode != excludeCode)
+                  .toList(growable: false);
+
         final body = switch (state) {
           PopularCodesLoading() => [
             for (var i = 0; i < 3; i++) ...[
@@ -391,26 +423,67 @@ class _PopularCodes extends StatelessWidget {
               style: AppTypography.meta.copyWith(color: colors.textMuted),
             ),
           ],
-          PopularCodesLoaded(:final codes) when codes.isEmpty => [
+          PopularCodesLoaded() when shown.isEmpty => [
             Text(
-              'Nothing to try right now — paste a code above instead.',
+              'Nothing else to try right now — paste a code above instead.',
               style: AppTypography.meta.copyWith(color: colors.textMuted),
             ),
           ],
-          PopularCodesLoaded(:final codes) => [
-            for (final slip in codes) ...[
-              _PopularCodeTile(slip: slip, onUse: onUse),
-              const SizedBox(height: 8),
+          PopularCodesLoaded(
+            :final loadingMore,
+            :final hasMore,
+            :final loadMoreError,
+          ) =>
+            [
+              for (final slip in shown) ...[
+                // Keyed by code so a "load more" only animates the new tiles,
+                // not the ones already settled on screen.
+                AppReveal(
+                  key: ValueKey(slip.bookingCode),
+                  child: _PopularCodeTile(slip: slip, onUse: onUse),
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (loadMoreError != null) ...[
+                Text(
+                  '${loadMoreError.message} Tap to try again.',
+                  style: AppTypography.meta.copyWith(color: colors.dangerText),
+                ),
+                const SizedBox(height: 8),
+              ],
+              if (hasMore)
+                AppButton(
+                  label: loadMoreError != null
+                      ? 'Retry loading codes'
+                      : 'Load more codes',
+                  variant: AppButtonVariant.secondary,
+                  icon: 'chevron-right',
+                  fullWidth: true,
+                  loading: loadingMore,
+                  onPressed: () => context.read<PopularCodesCubit>().loadMore(),
+                ),
             ],
-          ],
         };
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'POPULAR CODES',
-              style: AppTypography.label.copyWith(color: colors.textMuted),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    heading.toUpperCase(),
+                    style: AppTypography.label.copyWith(
+                      color: colors.textMuted,
+                    ),
+                  ),
+                ),
+                if (loaded != null && shown.isNotEmpty && loaded.total > 0)
+                  Text(
+                    '${shown.length} of ${loaded.total}',
+                    style: AppTypography.meta.copyWith(color: colors.textMuted),
+                  ),
+              ],
             ),
             const SizedBox(height: 8),
             ...body,
@@ -488,6 +561,9 @@ class _PopularCodeTileState extends State<_PopularCodeTile> {
                 'Booking code ${slip.bookingCode}, ${slip.selections.length} '
                 'selections, odds ${slip.totalOdds.toStringAsFixed(2)}',
             child: GestureDetector(
+              // Opaque so the whole row — padding and gaps included — is the
+              // tap target, not just the text glyphs.
+              behavior: HitTestBehavior.opaque,
               onTap: () => setState(() => _expanded = !_expanded),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -574,27 +650,39 @@ class _PopularCodeTileState extends State<_PopularCodeTile> {
               ),
             ),
           ),
-          if (_expanded) ...[
-            Container(
-              color: colors.surfaceRow,
-              child: Column(
-                children: [
-                  for (var i = 0; i < slip.selections.length; i++)
-                    SelectionRow(selection: slip.selections[i], index: i + 1),
-                ],
-              ),
+          // Height reveal on expand — mirrors the web's `grid-template-rows`
+          // 0fr→1fr transition, and animates open as smoothly as it closes.
+          AppExpandable(
+            expanded: _expanded,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  color: colors.surfaceRow,
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < slip.selections.length; i++)
+                        SelectionRow(
+                          selection: slip.selections[i],
+                          index: i + 1,
+                        ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: AppButton(
+                    label: 'Decode this code',
+                    variant: AppButtonVariant.secondary,
+                    icon: 'scan-line',
+                    fullWidth: true,
+                    onPressed: () => widget.onUse(slip.bookingCode),
+                  ),
+                ),
+              ],
             ),
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: AppButton(
-                label: 'Decode this code',
-                variant: AppButtonVariant.secondary,
-                icon: 'scan-line',
-                fullWidth: true,
-                onPressed: () => widget.onUse(slip.bookingCode),
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );

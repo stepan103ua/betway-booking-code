@@ -5,6 +5,7 @@ import '../../../../design/tokens/app_colors.dart';
 import '../../../../design/tokens/app_motion.dart';
 import '../../../../design/tokens/app_radius.dart';
 import '../../../../design/tokens/app_typography.dart';
+import '../../../../design/widgets/app_reveal.dart';
 
 /// One tappable outcome — a label and its odds — used both in an event tile's
 /// inline 1X2 row and in the "All markets" sheet. Selected legs carry the
@@ -74,7 +75,7 @@ class OutcomeChip extends StatelessWidget {
           ),
           if (selected) ...[
             const SizedBox(width: 6),
-            AppIcon('check', size: 12, color: colors.accentText),
+            AppPop(child: AppIcon('check', size: 12, color: colors.accentText)),
           ],
         ],
       ),
@@ -86,8 +87,9 @@ class OutcomeChip extends StatelessWidget {
       label: '$label at ${odds.toStringAsFixed(2)}',
       child: Opacity(
         opacity: off ? 0.4 : 1,
-        child: GestureDetector(
+        child: PressScale(
           onTap: off ? null : onTap,
+          enabled: !off,
           child: expand ? chip : IntrinsicWidth(child: chip),
         ),
       ),

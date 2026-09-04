@@ -122,11 +122,11 @@ return error(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  loading,TResult Function( List<Slip> codes)?  loaded,TResult Function( Failure failure)?  error,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  loading,TResult Function( List<Slip> codes,  int total,  bool hasMore,  int nextSkip,  bool loadingMore,  Failure? loadMoreError)?  loaded,TResult Function( Failure failure)?  error,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case PopularCodesLoading() when loading != null:
 return loading();case PopularCodesLoaded() when loaded != null:
-return loaded(_that.codes);case PopularCodesError() when error != null:
+return loaded(_that.codes,_that.total,_that.hasMore,_that.nextSkip,_that.loadingMore,_that.loadMoreError);case PopularCodesError() when error != null:
 return error(_that.failure);case _:
   return orElse();
 
@@ -145,11 +145,11 @@ return error(_that.failure);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  loading,required TResult Function( List<Slip> codes)  loaded,required TResult Function( Failure failure)  error,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  loading,required TResult Function( List<Slip> codes,  int total,  bool hasMore,  int nextSkip,  bool loadingMore,  Failure? loadMoreError)  loaded,required TResult Function( Failure failure)  error,}) {final _that = this;
 switch (_that) {
 case PopularCodesLoading():
 return loading();case PopularCodesLoaded():
-return loaded(_that.codes);case PopularCodesError():
+return loaded(_that.codes,_that.total,_that.hasMore,_that.nextSkip,_that.loadingMore,_that.loadMoreError);case PopularCodesError():
 return error(_that.failure);}
 }
 /// A variant of `when` that fallback to returning `null`
@@ -164,11 +164,11 @@ return error(_that.failure);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  loading,TResult? Function( List<Slip> codes)?  loaded,TResult? Function( Failure failure)?  error,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  loading,TResult? Function( List<Slip> codes,  int total,  bool hasMore,  int nextSkip,  bool loadingMore,  Failure? loadMoreError)?  loaded,TResult? Function( Failure failure)?  error,}) {final _that = this;
 switch (_that) {
 case PopularCodesLoading() when loading != null:
 return loading();case PopularCodesLoaded() when loaded != null:
-return loaded(_that.codes);case PopularCodesError() when error != null:
+return loaded(_that.codes,_that.total,_that.hasMore,_that.nextSkip,_that.loadingMore,_that.loadMoreError);case PopularCodesError() when error != null:
 return error(_that.failure);case _:
   return null;
 
@@ -213,7 +213,7 @@ String toString() {
 
 
 class PopularCodesLoaded implements PopularCodesState {
-  const PopularCodesLoaded(final  List<Slip> codes): _codes = codes;
+  const PopularCodesLoaded({required final  List<Slip> codes, required this.total, required this.hasMore, required this.nextSkip, this.loadingMore = false, this.loadMoreError}): _codes = codes;
   
 
  final  List<Slip> _codes;
@@ -223,6 +223,11 @@ class PopularCodesLoaded implements PopularCodesState {
   return EqualUnmodifiableListView(_codes);
 }
 
+ final  int total;
+ final  bool hasMore;
+ final  int nextSkip;
+@JsonKey() final  bool loadingMore;
+ final  Failure? loadMoreError;
 
 /// Create a copy of PopularCodesState
 /// with the given fields replaced by the non-null parameter values.
@@ -234,16 +239,16 @@ $PopularCodesLoadedCopyWith<PopularCodesLoaded> get copyWith => _$PopularCodesLo
 
 @override
 bool operator ==(Object other) {
-  return identical(this, other) || (other.runtimeType == runtimeType&&other is PopularCodesLoaded&&const DeepCollectionEquality().equals(other._codes, _codes));
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is PopularCodesLoaded&&const DeepCollectionEquality().equals(other._codes, _codes)&&(identical(other.total, total) || other.total == total)&&(identical(other.hasMore, hasMore) || other.hasMore == hasMore)&&(identical(other.nextSkip, nextSkip) || other.nextSkip == nextSkip)&&(identical(other.loadingMore, loadingMore) || other.loadingMore == loadingMore)&&(identical(other.loadMoreError, loadMoreError) || other.loadMoreError == loadMoreError));
 }
 
 
 @override
-int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_codes));
+int get hashCode => Object.hash(runtimeType,const DeepCollectionEquality().hash(_codes),total,hasMore,nextSkip,loadingMore,loadMoreError);
 
 @override
 String toString() {
-  return 'PopularCodesState.loaded(codes: $codes)';
+  return 'PopularCodesState.loaded(codes: $codes, total: $total, hasMore: $hasMore, nextSkip: $nextSkip, loadingMore: $loadingMore, loadMoreError: $loadMoreError)';
 }
 
 
@@ -254,7 +259,7 @@ abstract mixin class $PopularCodesLoadedCopyWith<$Res> implements $PopularCodesS
   factory $PopularCodesLoadedCopyWith(PopularCodesLoaded value, $Res Function(PopularCodesLoaded) _then) = _$PopularCodesLoadedCopyWithImpl;
 @useResult
 $Res call({
- List<Slip> codes
+ List<Slip> codes, int total, bool hasMore, int nextSkip, bool loadingMore, Failure? loadMoreError
 });
 
 
@@ -271,10 +276,15 @@ class _$PopularCodesLoadedCopyWithImpl<$Res>
 
 /// Create a copy of PopularCodesState
 /// with the given fields replaced by the non-null parameter values.
-@pragma('vm:prefer-inline') $Res call({Object? codes = null,}) {
+@pragma('vm:prefer-inline') $Res call({Object? codes = null,Object? total = null,Object? hasMore = null,Object? nextSkip = null,Object? loadingMore = null,Object? loadMoreError = freezed,}) {
   return _then(PopularCodesLoaded(
-null == codes ? _self._codes : codes // ignore: cast_nullable_to_non_nullable
-as List<Slip>,
+codes: null == codes ? _self._codes : codes // ignore: cast_nullable_to_non_nullable
+as List<Slip>,total: null == total ? _self.total : total // ignore: cast_nullable_to_non_nullable
+as int,hasMore: null == hasMore ? _self.hasMore : hasMore // ignore: cast_nullable_to_non_nullable
+as bool,nextSkip: null == nextSkip ? _self.nextSkip : nextSkip // ignore: cast_nullable_to_non_nullable
+as int,loadingMore: null == loadingMore ? _self.loadingMore : loadingMore // ignore: cast_nullable_to_non_nullable
+as bool,loadMoreError: freezed == loadMoreError ? _self.loadMoreError : loadMoreError // ignore: cast_nullable_to_non_nullable
+as Failure?,
   ));
 }
 

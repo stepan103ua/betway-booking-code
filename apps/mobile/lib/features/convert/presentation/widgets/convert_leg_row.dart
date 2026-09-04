@@ -7,6 +7,7 @@ import '../../../../design/tokens/app_radius.dart';
 import '../../../../design/tokens/app_spacing.dart';
 import '../../../../design/tokens/app_typography.dart';
 import '../../../../design/widgets/app_badge.dart';
+import '../../../../design/widgets/app_reveal.dart';
 import '../../../../models/selection.dart';
 import '../../../../widgets/slip/slip_format.dart';
 
@@ -170,9 +171,10 @@ class _DropToggle extends StatelessWidget {
       label: kept ? 'Keep this leg' : 'Dropped',
       child: Opacity(
         opacity: enabled ? 1 : 0.45,
-        child: GestureDetector(
+        child: PressScale(
           onTap: enabled ? onTap : null,
-          behavior: HitTestBehavior.opaque,
+          enabled: enabled,
+          scale: 0.9,
           // 20pt square, but a 44pt tap target around it — the design
           // system's non-negotiable minimum for anything tappable.
           child: SizedBox(
@@ -194,7 +196,13 @@ class _DropToggle extends StatelessWidget {
                 ),
                 alignment: Alignment.center,
                 child: kept
-                    ? AppIcon('check', size: 13, color: colors.textOnAccent)
+                    ? AppPop(
+                        child: AppIcon(
+                          'check',
+                          size: 13,
+                          color: colors.textOnAccent,
+                        ),
+                      )
                     : null,
               ),
             ),
