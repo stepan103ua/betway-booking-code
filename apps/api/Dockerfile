@@ -25,9 +25,8 @@ COPY packages/contracts/package.json packages/contracts/
 
 # --workspace scopes the install to api + contracts (skips web's next/react tree);
 # --include-workspace-root adds the root's typescript (the api manifest leans on it for the
-# build). The cache mount keeps tarballs across builds, so a rebuild is seconds.
-RUN --mount=type=cache,target=/root/.npm \
-  npm ci --workspace @booking-code/api --include-workspace-root \
+# build). This layer is cached until a manifest above changes, so source-only edits skip it.
+RUN npm ci --workspace @booking-code/api --include-workspace-root \
   --no-audit --fund=false --prefer-offline
 
 
@@ -54,9 +53,7 @@ COPY package.json package-lock.json ./
 COPY apps/api/package.json apps/api/
 COPY packages/contracts/package.json packages/contracts/
 
-# The cache mount lives outside the image, so nothing to clean off a layer afterwards.
-RUN --mount=type=cache,target=/root/.npm \
-  npm ci --omit=dev --workspace @booking-code/api --no-audit --fund=false --prefer-offline
+RUN npm ci --omit=dev --workspace @booking-code/api --no-audit --fund=false --prefer-offline
 
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 
