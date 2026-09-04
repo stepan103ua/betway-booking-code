@@ -148,5 +148,8 @@ a broken deployment, not a slow one.
 Environment variables: `BETWAY_BASE_URL`, `BETWAY_CONFIG_URL`, `BETWAY_FEEDS_URL`,
 `BETWAY_APIC_URL`, `REDIS_URL`, `PORT`, `ALLOWED_ORIGIN`. Every one has a working default except
 `REDIS_URL`, which is optional by design — the service boots with no environment at all.
+
+Where this actually ended up running, real values for the above, and every gotcha hit getting
+there: `docs/deployment.md`.
 `.env.example` committed with empty values; real values live in the platform's env settings,
 never in the repo (see the secret-scanning / push-protection setup in the main README).

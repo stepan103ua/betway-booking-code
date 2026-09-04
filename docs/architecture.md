@@ -1,7 +1,8 @@
 # Architecture diagrams — Betway Nigeria Booking Code Product
 
-Three diagrams: how the pieces fit together, then the two flows that matter — Decode (a
-read, cached) and Convert (a composition of two Betway calls, not a call of its own).
+Four diagrams: how the pieces fit together logically, the two flows that matter — Decode (a
+read, cached) and Convert (a composition of two Betway calls, not a call of its own) — and
+where those pieces actually run. `docs/deployment.md` is the prose version of the last one.
 
 ---
 
@@ -108,3 +109,41 @@ Betway has no "convert" endpoint — Convert is `resolve` then `encode`, compose
 our side (`docs/backend-api.md` §1). On a single bookmaker this is close to a formality; the
 real complexity Convert is built to eventually carry is cross-bookmaker mapping, which this
 composition point is the seam for, not something this assessment implements.
+
+---
+
+## 4. Deployment topology
+
+```mermaid
+flowchart LR
+    subgraph Tester["Android tester"]
+        Phone["App Tester\n(installed APK)"]
+    end
+    FBAD[["Firebase App Distribution"]]
+
+    Browser["Browser"]
+
+    subgraph Railway["Railway project — 3 services"]
+        WebSvc["web service\napps/web/Dockerfile"]
+        ApiSvc["api service\napps/api/Dockerfile"]
+        RedisSvc[("Redis\n(managed)")]
+    end
+
+    Betway[["Betway NG"]]
+
+    Browser -- HTTPS --> WebSvc
+    WebSvc -- "server-side fetch\nAPI_URL" --> ApiSvc
+    Phone -- "HTTPS\nAPI_BASE_URL, baked in via\ndart_defines.json at build time" --> ApiSvc
+    ApiSvc <--> RedisSvc
+    ApiSvc -- "live" --> Betway
+    FBAD -. "installs" .-> Phone
+```
+
+The logical picture in §1 doesn't say where anything runs — this is the physical one. All
+three Railway services build from the repo's own Dockerfiles (`docker build -f
+apps/api/Dockerfile .`, context = repo root, because this is an npm workspace); Redis is
+Railway's managed instance, not the `redis:7-alpine` container `docker-compose.yml` runs
+locally. The mobile client never touches Railway directly — its base URL is a build-time
+constant, not something fetched at runtime, so there is no wiring between it and the web/API
+services beyond both pointing at the same `apps/api` origin. Full reasoning and the
+environment-variable list: `docs/deployment.md`.
