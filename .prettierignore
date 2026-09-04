@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+package-lock.json
+.next
+apps/web/next-env.d.ts
+
+# Markdown here is hand-wrapped prose — docs/, CLAUDE.md, the review skill. Prettier reflows
+# it into a different wrap width and produces a large diff that changes no meaning.
+**/*.md
+
+# Flutter app — Dart tooling owns formatting there (`dart format`). Prettier would also
+# reflow the Contents.json files Xcode generates and rewrites.
+apps/mobile

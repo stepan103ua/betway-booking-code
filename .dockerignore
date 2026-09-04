@@ -1,0 +1,45 @@
+# Keeps the build context small and stops host state leaking into the image.
+# Anything the build genuinely needs is COPYed explicitly in apps/api/Dockerfile.
+
+# Installed inside the image by `npm ci`. Copying the host's would break native modules built
+# for a different platform, and is the single biggest cause of slow Docker builds here.
+node_modules
+**/node_modules
+
+# Built inside the image.
+dist
+**/dist
+.next
+**/.next
+*.tsbuildinfo
+
+# Secrets and local state must never reach an image layer — layers are readable by anyone who
+# can pull it, and deleting a file in a later layer does not remove it from the earlier one.
+.env
+.env.*
+!.env.example
+
+# Not needed at runtime.
+coverage
+**/coverage
+docs
+.git
+.github
+.idea
+.vscode
+.claude
+CLAUDE.md
+CLAUDE.local.md
+README.md
+**/*.md
+!apps/api/fixtures/README.md
+
+# Docker's own files.
+Dockerfile
+**/Dockerfile
+.dockerignore
+docker-compose.yml
+docker-compose.*.yml
+
+.DS_Store
+*.log

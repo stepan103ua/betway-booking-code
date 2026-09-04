@@ -1,0 +1,10 @@
+# Copy to `key.properties` (gitignored) to sign release builds with a real keystore.
+# Without this file, `release` falls back to the debug keys — see app/build.gradle.kts.
+#
+#   keytool -genkey -v -keystore ~/booking-code-release.jks \
+#     -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+
+storeFile=/absolute/path/to/booking-code-release.jks
+storePassword=changeme
+keyAlias=upload
+keyPassword=changeme

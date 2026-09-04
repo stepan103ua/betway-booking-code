@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+build/
+*.tsbuildinfo
+
+# test output
+coverage/
+
+# environment — never commit real values, only .env.example
+.env
+.env.*
+!.env.example
+
+# local Claude context, not part of the deliverable
+CLAUDE.local.md
+.claude/settings.local.json
+
+# editors
+.idea/
+.vscode/
+*.swp
+
+# os
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
