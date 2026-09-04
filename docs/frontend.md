@@ -41,7 +41,7 @@ point where interactivity actually starts.
 | Screen | Server Component | Client Component |
 |---|---|---|
 | Decode (`/` and `/<code>`) | `popular codes` fetch; **the decode itself** — `/<code>` resolves the slip server-side so the URL is a shareable link | Code input, the paste/copy/share controls, the popular-list "load more" |
-| Create (`/create`) | Initial `sports` + `events` fetch | Outcome picker, selection tray, live total-odds recalculation |
+| Create (`/create`, `/create?sport=`) | `sports` + the first `events` page for the selected sport | Outcome picker, draft tray, live total-odds, "more markets" sheet; generate is a Server Action |
 | Convert (`/convert`) | — (arrives with a code from Decode, or a fresh input) | Checkbox list, before/after diff, recompute on every toggle |
 
 The rule of thumb: **fetch on the server, mutate on the client.** A page never ships a client
@@ -159,20 +159,25 @@ surfaces at the web app's build, not at runtime in front of a reviewer.
 
 ```
 app/
-  layout.tsx            theme, fonts, shell (header/footer)
+  layout.tsx            fonts, wordmark, the Decode/Create/Convert mode tabs (design-system §4)
   [[...code]]/page.tsx  Decode — serves `/` (empty) and `/<code>` (resolved slip)
-  create/page.tsx
-  convert/page.tsx
-  actions.ts            Server Actions — currently just loadPopular (paged read)
-  error.tsx             route-level error boundary
-  not-found.tsx         branded 404
+  create/page.tsx       Create — `?sport=` selects the sport; sports + first events page here
+  convert/page.tsx      placeholder
+  actions.ts            Server Actions the client triggers: loadPopular, loadEvents,
+                        loadEventMarkets, generateCode
+  error.tsx / not-found.tsx
 components/
-  slip-card.tsx         shared across all three screens (+ slip-header, selection-row, …)
-  decode-screen.tsx, create-picker.tsx, convert-list.tsx
+  mode-tabs.tsx         the shell tab switch (usePathname)
+  slip-card.tsx         shared (+ slip-header, selection-row, slip-skeleton, slip-footer)
+  decode-screen.tsx
+  create/               create-screen + sport-selector, event-list, event-tile, outcome-chip,
+                        draft-tray, market-picker-dialog, created-code
   ui/                   restyled shadcn-style primitives (§1)
 lib/
   api.ts                thin fetch wrapper: base URL, JSON headers, error unwrapping
-  resolve.ts            server-side decode → a UI-ready result union (used by the route)
+  resolve.ts            server-side decode → a UI-ready result union
+  create.ts             server-side sports/events/markets fetch + createCode → result unions
+  draft.ts              the DraftPick shape + toggle/total helpers (the one UI-only type)
 ```
 
 No `middleware.ts` / `proxy.ts` — nothing here needs request interception (no auth, no

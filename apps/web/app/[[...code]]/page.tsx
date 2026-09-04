@@ -53,14 +53,7 @@ export default async function DecodePage({ params }: { params: Promise<Params> }
   const [popular, result] = await Promise.all([firstPopularPage(), resolveFor(code)]);
 
   return (
-    <main className="flex flex-col gap-5">
-      <header className="flex flex-col gap-1.5">
-        <h1 className="type-h1 text-text-primary">Decode a booking code</h1>
-        <p className="type-body text-text-secondary">
-          Paste a Betway Nigeria booking code to see everything it contains.
-        </p>
-      </header>
-
+    <main>
       <DecodeScreen code={code} result={result} firstPopularPage={popular} />
     </main>
   );
