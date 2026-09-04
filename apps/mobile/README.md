@@ -39,15 +39,23 @@ lib/
 
 ## Running it
 
+Build-time config lives in a JSON file, not on the command line — copy the committed template
+once and edit it for your target:
+
 ```bash
-flutter pub get
-flutter run --dart-define=API_BASE_URL=http://localhost:3000
+cp dart_defines.example.json dart_defines.json   # gitignored; holds real URLs / secrets
 ```
 
-`API_BASE_URL` defaults to `http://localhost:3000` if omitted, which is correct for the iOS
-simulator against a locally running `apps/api` (`npm run dev` from the repo root) and nothing
-else — see `lib/core/network/dio_client.dart`'s doc comment for the Android emulator
-(`10.0.2.2`) and physical-device case.
+```bash
+flutter pub get
+flutter run --dart-define-from-file=dart_defines.json
+```
+
+`dart_defines.json` carries `API_BASE_URL`. The template points at `http://localhost:3000`,
+which is correct for the iOS simulator against a locally running `apps/api` (`npm run dev`
+from the repo root) and nothing else — see `lib/core/network/dio_client.dart`'s doc comment
+for the Android emulator (`10.0.2.2`) and physical-device cases. A bare
+`--dart-define=API_BASE_URL=…` still works and overrides the file for a one-off run.
 
 ```bash
 dart run build_runner build --delete-conflicting-outputs   # after touching an @freezed class
@@ -60,22 +68,35 @@ flutter test
 
 **Android → APK → Firebase App Distribution**, per the brief.
 
+Set `API_BASE_URL` in `dart_defines.json` to the deployed API, then:
+
 ```bash
-flutter build apk --release --dart-define=API_BASE_URL=https://<your-api-host>
+flutter build apk --release --dart-define-from-file=dart_defines.json
+# → build/app/outputs/flutter-apk/app-release.apk
 ```
 
-`--dart-define` is compile-time, so the release base URL has to be on this command line (or a
-CI variable) — a build without it points at `http://localhost:3000` and reaches nothing. One
-fat APK is fine here; `--split-per-abi` is a size optimisation not worth the extra upload step
-yet.
+The value is compile-time, so it has to be baked in at build (the file, or a `--dart-define`
+/ CI variable) — a build without it points at `http://localhost:3000` and reaches nothing.
+One fat APK is fine here; `--split-per-abi` is a size optimisation not worth the extra upload
+step yet.
 
-Two things must be in place before the first real distribution build, both currently left as
-the Flutter template defaults:
+Then push it to testers (Firebase CLI, or drag it into the App Distribution console):
 
-- **A release signing config.** `android/app/build.gradle.kts` still signs `release` with the
-  debug keystore so `flutter run --release` works. Generate a keystore, put its path and
-  passwords in `android/key.properties` (already gitignored, along with `*.jks`/`*.keystore`),
-  and point `signingConfigs.release` at it.
+```bash
+firebase appdistribution:distribute build/app/outputs/flutter-apk/app-release.apk \
+  --app <FIREBASE_ANDROID_APP_ID> --groups reviewers
+```
+
+Firebase App Distribution needs no `google-services.json` and no SDK in the app — only the
+project's Android App ID and a signed APK.
+
+One thing to put in place before the first tester build:
+
+- **A release signing config.** `android/app/build.gradle.kts` falls back to the debug
+  keystore when `android/key.properties` is absent, so `flutter build apk --release` works on
+  a fresh clone. For a build testers install, generate a keystore and put its path and
+  passwords in `android/key.properties` (gitignored, along with `*.jks`/`*.keystore`) — the
+  gradle config already points `signingConfigs.release` at it.
 - **`version:` in `pubspec.yaml`** bumped per build — App Distribution shows two uploads with
   the same `versionName+versionCode` as indistinguishable.
 

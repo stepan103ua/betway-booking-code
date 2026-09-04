@@ -43,3 +43,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Release signing — never commit the keystore or its passwords
+/android/key.properties
+*.jks
+*.keystore
+
+# Build-time config / secrets — real values only, commit dart_defines.example.json
+/dart_defines.json

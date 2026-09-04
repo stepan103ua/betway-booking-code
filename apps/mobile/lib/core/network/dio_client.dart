@@ -1,9 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
-/// `apps/api`'s base URL. Passed at build/run time —
-/// `flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000` — because
-/// `localhost` means something different on every target this app runs on:
+/// `apps/api`'s base URL. Passed at build/run time — via `dart_defines.json`
+/// (`--dart-define-from-file`, see the mobile README) or a bare
+/// `--dart-define=API_BASE_URL=http://10.0.2.2:3000` — because `localhost`
+/// means something different on every target this app runs on:
 ///
 /// - iOS simulator: `http://localhost:3000` shares the host Mac's loopback,
 ///   so the default below works unmodified.
