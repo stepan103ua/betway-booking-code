@@ -21,7 +21,7 @@ same fact drift; the docs say so themselves (`backend.md` §4).
 | `docs/backend.md` | Stack, folder structure, caching policy, cross-cutting concerns, deploy |
 | `docs/betway-api.md` | Verified upstream endpoints, payloads, ID scheme, and the traps |
 | `docs/architecture.md` | How the pieces fit; the Decode and Convert flows as diagrams |
-| `docs/frontend.md`, `docs/mobile.md` | The two clients — `apps/mobile` is built, `apps/web` is not |
+| `docs/frontend.md`, `docs/mobile.md` | The two clients — both `apps/web` and `apps/mobile` are built |
 | `docs/design-system.md` | Tokens, components and visual rules shared by both clients — `apps/mobile/lib/design/` is the reference implementation |
 
 If code and a doc disagree, that is a bug in one of them — say so rather than silently
@@ -42,11 +42,14 @@ apps/api/              Express service (the only backend)
   src/schemas/           Zod request schemas
   fixtures/              committed upstream JSON, for offline tests and demos
   tests/                 Vitest + Supertest against the app object
+apps/web/              Next.js client — plain HTTP consumer of apps/api
+apps/mobile/           Flutter client — plain HTTP consumer of apps/api
 packages/contracts/    shared DTOs, type-only. Imported by every client
 docs/                  design documents — source of truth
 ```
 
-`apps/web` (Next.js) and `apps/mobile` (Flutter) are designed but not built.
+`apps/web` (Next.js) and `apps/mobile` (Flutter) are both built; each is an equal HTTP
+consumer of `apps/api` and never calls Betway directly.
 
 ## Commands
 
