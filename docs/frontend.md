@@ -42,7 +42,7 @@ point where interactivity actually starts.
 |---|---|---|
 | Decode (`/` and `/<code>`) | `popular codes` fetch; **the decode itself** — `/<code>` resolves the slip server-side so the URL is a shareable link | Code input, the paste/copy/share controls, the popular-list "load more" |
 | Create (`/create`, `/create?sport=`) | `sports` + the first `events` page for the selected sport | Outcome picker, draft tray, live total-odds, "more markets" sheet; generate is a Server Action |
-| Convert (`/convert`) | — (arrives with a code from Decode, or a fresh input) | Checkbox list, before/after diff, recompute on every toggle |
+| Convert (`/convert`, `/convert?code=`) | `?code=` is resolved server-side to the slip being converted (reuses `lib/resolve.ts`) | Keep/drop checklist, live before/after diff; convert is a Server Action |
 
 The rule of thumb: **fetch on the server, mutate on the client.** A page never ships a client
 bundle just to make its first read — that read happens in a Server Component and is already
@@ -162,9 +162,9 @@ app/
   layout.tsx            fonts, wordmark, the Decode/Create/Convert mode tabs (design-system §4)
   [[...code]]/page.tsx  Decode — serves `/` (empty) and `/<code>` (resolved slip)
   create/page.tsx       Create — `?sport=` selects the sport; sports + first events page here
-  convert/page.tsx      placeholder
+  convert/page.tsx      Convert — `?code=` server-resolved to the slip being converted
   actions.ts            Server Actions the client triggers: loadPopular, loadEvents,
-                        loadEventMarkets, generateCode
+                        loadEventMarkets, generateCode, convert
   error.tsx / not-found.tsx
 components/
   mode-tabs.tsx         the shell tab switch (usePathname)
@@ -172,11 +172,13 @@ components/
   decode-screen.tsx
   create/               create-screen + sport-selector, event-list, event-tile, outcome-chip,
                         draft-tray, market-picker-dialog, created-code
+  convert/              convert-screen + convert-leg-row, diff-summary, convert-result-view
   ui/                   restyled shadcn-style primitives (§1)
 lib/
   api.ts                thin fetch wrapper: base URL, JSON headers, error unwrapping
   resolve.ts            server-side decode → a UI-ready result union
   create.ts             server-side sports/events/markets fetch + createCode → result unions
+  convert.ts            server-side convertCode → result union; convert-preview.ts → the diff maths
   draft.ts              the DraftPick shape + toggle/total helpers (the one UI-only type)
 ```
 

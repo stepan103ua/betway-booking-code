@@ -1,15 +1,14 @@
 'use client';
 
-import type { Ref } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { Hash, ScanLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { isValidCode } from '@/lib/format';
 
 /**
- * The entry point of the whole product: paste a code, decode it. The `<form>` and its action
- * live in the parent (`decode-screen.tsx`) so `useActionState` can own submission — this is
- * the visual composition: the code field, an inline Paste button, and the submit CTA.
+ * The code field, an inline Paste button, and the submit CTA. The `<form>` and what submit
+ * does live in the parent (`decode-screen.tsx`, `convert-screen.tsx`).
  *
  * The `^BW[0-9A-F]{8}$` gate matches `apps/api`'s own validation. A looser client gate would
  * let `BWZZZZZZZZ` reach the server as a `400 invalid_request` — a more confusing failure
@@ -22,6 +21,9 @@ export function CodeInput({
   error,
   loading,
   inputRef,
+  label = 'Booking code',
+  cta = 'Decode code',
+  ctaIcon = <ScanLine className="size-[18px]" aria-hidden />,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -29,6 +31,9 @@ export function CodeInput({
   error?: string;
   loading: boolean;
   inputRef?: Ref<HTMLInputElement>;
+  label?: string;
+  cta?: string;
+  ctaIcon?: ReactNode;
 }) {
   const ready = isValidCode(value);
 
@@ -37,7 +42,7 @@ export function CodeInput({
       <Input
         ref={inputRef}
         name="code"
-        label="Booking code"
+        label={label}
         mono
         required
         autoComplete="off"
@@ -58,15 +63,8 @@ export function CodeInput({
           )
         }
       />
-      <Button
-        type="submit"
-        size="lg"
-        block
-        loading={loading}
-        disabled={!ready}
-        icon={<ScanLine className="size-[18px]" aria-hidden />}
-      >
-        Decode code
+      <Button type="submit" size="lg" block loading={loading} disabled={!ready} icon={ctaIcon}>
+        {cta}
       </Button>
     </div>
   );

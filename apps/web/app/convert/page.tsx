@@ -1,32 +1,35 @@
-import Link from 'next/link';
-import { buttonVariants } from '@/components/ui/button';
-import { DashedBorder } from '@/components/ui/dashed-border';
+import type { Metadata } from 'next';
+import { ConvertScreen } from '@/components/convert/convert-screen';
+import { isValidCode } from '@/lib/format';
+import { type ResolveResult, resolveSlip } from '@/lib/resolve';
+
+export const metadata: Metadata = { title: 'Convert — Betway Booking Code' };
 
 /**
- * Placeholder. Convert is designed (docs/frontend.md §2) but not built — this exists so
- * Decode's "Rebuild with N live legs" has a real target instead of a 404. It reads the
- * `?code=` that Decode hands over so the wiring is already in place for the real screen.
+ * Convert — load a booking code, drop the legs you don't want (dead ones go automatically),
+ * reissue it as a fresh code. `?code=` selects the code and is server-resolved here — the
+ * same "URL is the state" choice Decode and Create make, and the target of Decode's "Rebuild
+ * with N live legs" link (`/convert?code=…`). Dropping legs and the convert call are client
+ * state / a Server Action.
  */
 export default async function ConvertPage({
   searchParams,
 }: {
   searchParams: Promise<{ code?: string }>;
 }) {
-  const { code } = await searchParams;
+  const raw = (await searchParams).code?.trim().toUpperCase();
+  const code = raw ? raw : undefined;
+
+  const resolve: ResolveResult | undefined =
+    code === undefined
+      ? undefined
+      : isValidCode(code)
+        ? await resolveSlip(code)
+        : { kind: 'invalid' };
 
   return (
-    <main className="flex animate-rise flex-col gap-4">
-      <h1 className="type-h1 text-text-primary">Convert</h1>
-      <DashedBorder className="flex flex-col items-center gap-3 px-6 py-9 text-center">
-        <p className="type-h3 text-text-primary">Not built yet</p>
-        <p className="type-meta max-w-[280px] text-text-muted">
-          Convert drops the dead legs from a code and reissues it.
-          {code ? ` Decode sent over ${code}.` : ''}
-        </p>
-        <Link href="/" className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
-          Back to Decode
-        </Link>
-      </DashedBorder>
+    <main>
+      <ConvertScreen code={code} resolve={resolve} />
     </main>
   );
 }
