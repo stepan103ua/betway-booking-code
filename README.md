@@ -11,11 +11,11 @@ it — this product decodes it, shows what has gone stale, and reissues it.
 
 | | URL |
 |---|---|
-| Web | `https://<web>.up.railway.app` |
-| API health | `https://<api>.up.railway.app/api/health` |
+| Web | <https://wonderful-eagerness-production.up.railway.app> |
+| API | <https://betway-booking-code-production.up.railway.app/api/health> |
 | Android APK | Firebase App Distribution — see [`apps/mobile/README.md`](apps/mobile/README.md) |
 
-<!-- Replace the placeholders once the Railway domains are generated. -->
+<!-- Fill in the APK invite link once distributed. -->
 
 ## Status
 

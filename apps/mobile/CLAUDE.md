@@ -62,7 +62,8 @@ tab through `shell/app_shell.dart` (`onConvert` carries the code).
 
 ```bash
 flutter pub get
-flutter run --dart-define=API_BASE_URL=http://localhost:3000   # see core/network/dio_client.dart
+cp dart_defines.example.json dart_defines.json                  # once — gitignored, real URLs
+flutter run --dart-define-from-file=dart_defines.json           # see core/network/dio_client.dart
 dart run build_runner build --delete-conflicting-outputs        # after touching an @freezed model or state
 flutter analyze
 dart format --output=none --set-exit-if-changed lib test
@@ -108,9 +109,10 @@ commits the result — a stale generated file is a worse failure mode than a lar
   async gap. Don't re-flag what the analyzer already underlines.
 - A `Failure` subclass lives in `core/failure.dart`, shared across features, per
   `docs/mobile.md` §5 — not one hierarchy per feature.
-- Base URL is a `--dart-define`, never hardcoded past `core/network/dio_client.dart`'s own
-  documented default. `localhost` means the host on an iOS simulator, the emulator itself on
-  Android (`10.0.2.2` reaches the host there), and nothing useful on a physical device.
+- Base URL is a build-time define — `dart_defines.json` via `--dart-define-from-file`, or a
+  bare `--dart-define` — never hardcoded past `core/network/dio_client.dart`'s own documented
+  default. `localhost` means the host on an iOS simulator, the emulator itself on Android
+  (`10.0.2.2` reaches the host there), and nothing useful on a physical device.
 
 ## Anti-goals
 
