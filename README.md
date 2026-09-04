@@ -7,21 +7,35 @@ A booking code is how bettors share a slip: `BW6E19810C` stands for a set of sel
 their odds. Betway's own site can redeem one but gives you little insight into what is inside
 it — this product decodes it, shows what has gone stale, and reissues it.
 
+## Live
+
+| | URL |
+|---|---|
+| Web | `https://<web>.up.railway.app` |
+| API health | `https://<api>.up.railway.app/api/health` |
+| Android APK | Firebase App Distribution — see [`apps/mobile/README.md`](apps/mobile/README.md) |
+
+<!-- Replace the placeholders once the Railway domains are generated. -->
+
 ## Status
 
-The API skeleton runs; the three core operations are not implemented yet. `GET /api/health`
-answers, every other route is mounted with its validation live and returns `501` in the
-standard error shape.
+All three core operations — decode, encode, convert — are implemented and run against live
+Betway, along with the catalogue endpoints (`/api/sports`, `/api/events`,
+`/api/events/:id/markets`) that back the Create picker. Both clients are built: `apps/web`
+(Next.js) and `apps/mobile` (Flutter), each a plain HTTP consumer of `apps/api`.
+
+`npm run typecheck && npm run lint && npm test` is green across every workspace (158 API + 18
+web tests); `apps/mobile` adds `flutter analyze` and 72 tests.
 
 ## Layout
 
 ```
 apps/api/            Express service — the only thing that talks to Betway
+apps/web/            Next.js client
+apps/mobile/         Flutter client
 packages/contracts/  shared DTOs, imported by every client
 docs/                design documents (see below)
 ```
-
-`apps/web` (Next.js) and `apps/mobile` (Flutter) are designed in `docs/` but not built.
 
 Both clients are plain HTTP consumers of `apps/api`. Nothing calls Betway directly — it
 publishes no CORS headers for third-party origins, so every request has to originate
