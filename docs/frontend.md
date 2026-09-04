@@ -239,6 +239,9 @@ of a public one — a later optimization, not a day-one requirement.
 `docker-compose.yml` exist only so `npm run docker:up` can bring web + api + redis up
 together for a local end-to-end demo. Vercel does not use them.
 
+That Dockerfile ended up being the actual deploy path instead — `docs/deployment.md` has the
+live URL, why Railway over Vercel this time, and the env vars as actually set.
+
 ---
 
 ## 10. Explicitly not used, and why

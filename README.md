@@ -13,9 +13,11 @@ it — this product decodes it, shows what has gone stale, and reissues it.
 |---|---|
 | Web | <https://wonderful-eagerness-production.up.railway.app> |
 | API | <https://betway-booking-code-production.up.railway.app/api/health> |
-| Android APK | Firebase App Distribution — see [`apps/mobile/README.md`](apps/mobile/README.md) |
+| Android APK | Firebase App Distribution — <https://appdistribution.firebase.dev/i/e316379ad4fbf958> |
 
-<!-- Fill in the APK invite link once distributed. -->
+The APK link is a self-serve invite: open it, accept, sign in with a Google account, install
+the "App Tester" app, and the build appears there. It is built against the API above. See
+[`apps/mobile/README.md`](apps/mobile/README.md) for the iOS path and how the build is made.
 
 ## Status
 
@@ -96,11 +98,16 @@ Full request/response contract in [`docs/backend-api.md`](docs/backend-api.md).
 
 The design work is done and lives in `docs/`. It is the source of truth for this repository.
 
-- [`architecture.md`](docs/architecture.md) — how the pieces fit; Decode and Convert as diagrams
-- [`backend.md`](docs/backend.md) — stack, structure, caching, deployment, and the reasoning
+- [`architecture.md`](docs/architecture.md) — how the pieces fit; Decode, Convert and the
+  deployment topology as diagrams
+- [`backend.md`](docs/backend.md) — stack, structure, caching, and the reasoning
 - [`backend-api.md`](docs/backend-api.md) — the request/response contract
 - [`betway-api.md`](docs/betway-api.md) — reverse-engineered upstream API, verified live
 - [`frontend.md`](docs/frontend.md), [`mobile.md`](docs/mobile.md) — the two clients
+- [`deployment.md`](docs/deployment.md) — where this actually runs, env vars, and every
+  platform gotcha hit getting there
+- [`verification.md`](docs/verification.md) — generated and converted codes, loaded on
+  Betway's own site, against the live deployment
 
 Two things worth knowing before reading the code:
 

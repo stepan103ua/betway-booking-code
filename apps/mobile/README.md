@@ -68,6 +68,12 @@ flutter test
 
 **Android → APK → Firebase App Distribution**, per the brief.
 
+**Install link:** <https://appdistribution.firebase.dev/i/e316379ad4fbf958> — a self-serve
+invite (open it, accept, sign in with a Google account, install the "App Tester" app, and the
+build shows up). Built against `https://betway-booking-code-production.up.railway.app`.
+
+### Building and uploading
+
 Set `API_BASE_URL` in `dart_defines.json` to the deployed API, then:
 
 ```bash
@@ -90,15 +96,17 @@ firebase appdistribution:distribute build/app/outputs/flutter-apk/app-release.ap
 Firebase App Distribution needs no `google-services.json` and no SDK in the app — only the
 project's Android App ID and a signed APK.
 
-One thing to put in place before the first tester build:
+Notes on this build:
 
-- **A release signing config.** `android/app/build.gradle.kts` falls back to the debug
-  keystore when `android/key.properties` is absent, so `flutter build apk --release` works on
-  a fresh clone. For a build testers install, generate a keystore and put its path and
-  passwords in `android/key.properties` (gitignored, along with `*.jks`/`*.keystore`) — the
-  gradle config already points `signingConfigs.release` at it.
-- **`version:` in `pubspec.yaml`** bumped per build — App Distribution shows two uploads with
-  the same `versionName+versionCode` as indistinguishable.
+- **It is debug-signed, deliberately.** `android/app/build.gradle.kts` falls back to the debug
+  keystore when `android/key.properties` is absent. App Distribution accepts a debug-signed
+  APK and testers install it fine; the tradeoff is that the signature is machine-local, so a
+  rebuild from a different machine or CI would force testers to reinstall. A proper upload
+  keystore (`keytool` → `android/key.properties`, already gitignored along with
+  `*.jks`/`*.keystore`; the gradle config points `signingConfigs.release` at it) is the next
+  step for anything beyond a single-machine hand-off, and the prerequisite for Play Store.
+- **`version:` in `pubspec.yaml`** must be bumped per build — App Distribution shows two
+  uploads with the same `versionName+versionCode` as indistinguishable.
 
 **iOS is out of scope** — no build was produced. An IPA path would need: Apple Developer
 Program enrollment; a distribution certificate and provisioning profile (replacing Android's
